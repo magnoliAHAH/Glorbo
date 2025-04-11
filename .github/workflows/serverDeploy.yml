@@ -23,11 +23,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            mkdir -p /home/deploy/app
-            cd /home/deploy/app
-            if [ -d .git ]; then
-              git pull
-            else
-              git clone https://github.com/magnoliAHAH/Glorbo.git .
-            fi
+            cd Glorbo && docker compose down
+            cd .. && rm -rf Glorbo
+            git clone https://github.com/magnoliAHAH/Glorbo.git
+            cd Glorbo
             docker compose up -d --build
