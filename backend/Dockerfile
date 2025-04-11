@@ -14,6 +14,8 @@ RUN go mod download
 # Копируем все файлы проекта
 COPY . .
 
+COPY ./certs /app/certs
+
 # Собираем приложение
 RUN go build -o main .
 
