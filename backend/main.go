@@ -17,14 +17,20 @@ type FileNode struct {
 
 func main() {
 	http.HandleFunc("/api/structure", handleStructure)
-	log.Println("Server running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	// Загрузка SSL-сертификатов
+	cert := os.Getenv("SSL_CERT_PATH")
+	key := os.Getenv("SSL_KEY_PATH")
+
+	log.Println("Server running on https://localhost:8080")
+	log.Fatal(http.ListenAndServeTLS(":8080", cert, key, nil))
 }
 
 func handleStructure(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
 
 	// Обработка OPTIONS запросов
 	if r.Method == http.MethodOptions {
