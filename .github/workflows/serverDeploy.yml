@@ -23,7 +23,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-
+            cd Glorbo && docker compose down
+            cd .. && rm -rf Glorbo
             git clone https://github.com/magnoliAHAH/Glorbo.git
             cd Glorbo
             docker compose up -d --build
