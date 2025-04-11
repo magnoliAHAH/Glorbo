@@ -17,13 +17,8 @@ type FileNode struct {
 
 func main() {
 	http.HandleFunc("/api/structure", handleStructure)
-
-	// Загрузка SSL-сертификатов
-	cert := os.Getenv("SSL_CERT_PATH")
-	key := os.Getenv("SSL_KEY_PATH")
-
-	log.Println("Server running on https://localhost:8080")
-	log.Fatal(http.ListenAndServeTLS(":8080", cert, key, nil))
+	log.Println("Server running on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func handleStructure(w http.ResponseWriter, r *http.Request) {
