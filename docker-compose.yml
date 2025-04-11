@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: 
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt/ssl-dhparams.pem:/etc/ssl/certs/dhparam.pem
+      - /etc/letsencrypt/live/supreme-roulette.work.gd/fullchain.pem:/etc/letsencrypt/live/supreme-roulette.work.gd/fullchain.pem
+      - /etc/letsencrypt/live/supreme-roulette.work.gd/privkey.pem:/etc/letsencrypt/live/supreme-roulette.work.gd/privkey.pem
+      - /etc/letsencrypt/live/supreme-roulette.work.gd/chain.pem:/etc/letsencrypt/live/supreme-roulette.work.gd/chain.pem
+    networks:
+      - app-network
+    depends_on:
+      - backend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - TELEGRAM_BOT_TOKEN=7513080511:AAFQHYyrZROaysopau2WF3Qi8NjtTj7p0q4
+      - DATABASE_URL=postgres://postgres:password@db:5432/telegram_bot?sslmode=disable
+      - API_SECRET=dev_5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8
+      - PORT=8080
+    networks:
+      - app-network
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: glorbo
+      TZ: Europe/Moscow       # Общая временная зона контейнера
+      PGTZ: Europe/Moscow 
+    networks:
+      - app-network
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+      
+networks:
+  app-network:
+    driver: bridge
