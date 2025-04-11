@@ -6,7 +6,7 @@ import Graph from '../components/Graph'
 const Dashboard = () => {
   const [structure, setStructure] = useState(null)
   useEffect(() => {
-    fetch('http://localhost:8080/api/structure?repo=https://github.com/magnoliAHAH/roulette')
+    fetch('http://supreme-roulette.work.gd/api/structure?repo=https://github.com/magnoliAHAH/roulette')
       .then(res => res.json())
       .then(data => setStructure(data))
   }, [])

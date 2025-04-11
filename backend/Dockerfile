@@ -4,6 +4,7 @@ FROM golang:1.24-alpine
 # Устанавливаем рабочую директорию в контейнере
 WORKDIR /app
 
+RUN apk add --no-cache git ca-certificates
 # Копируем go.mod и go.sum для установки зависимостей
 COPY go.mod ./
 
