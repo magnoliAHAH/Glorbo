@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import {ReactFlow,  Background, Controls } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { buildGraphFromTree } from '../functions/generateGraph'
-import FolderNode from './Foldernode'
+import FolderNode from './FolderNode'
 
 const Graph = ({ structure }) => {
   const [elements, setElements] = useState({ nodes: [], edges: [] })
