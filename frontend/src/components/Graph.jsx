@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { ReactFlow, Background, Controls } from '@xyflow/react'
+import {ReactFlow,  Background, Controls } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { buildGraphFromTree } from '../functions/generateGraph'
+import FolderNode from './Foldernode'
 
 const Graph = ({ structure }) => {
   const [elements, setElements] = useState({ nodes: [], edges: [] })
@@ -15,7 +16,12 @@ const Graph = ({ structure }) => {
 
   return (
     <div style={{ width: '100%', height: '80vh' }}>
-      <ReactFlow nodes={elements.nodes} edges={elements.edges}>
+      <ReactFlow
+        nodes={elements.nodes}
+        edges={elements.edges}
+        nodeTypes={{ folderNode: FolderNode }}
+        fitView
+      >
         <Background />
         <Controls />
       </ReactFlow>
