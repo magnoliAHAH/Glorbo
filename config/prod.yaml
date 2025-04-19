@@ -1,0 +1,6 @@
+env: "prod"
+starage_path: "postgres://postgres:password@db:5432"
+token_ttl: 24h
+grpc:
+  port: 44044
+  timeout: 10s

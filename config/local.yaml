@@ -1,0 +1,6 @@
+env: "local"
+storage_path: "postgres://postgres:password@localhost:5432"
+token_ttl: 24h
+grpc:
+  port: 44044
+  timeout: 10s
