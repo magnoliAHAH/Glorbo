@@ -81,17 +81,16 @@ services:
     image: grafana/loki:2.9.2
     ports:
       - "3100:3100"
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml  # Используем встроенную конфигурацию
     networks:
       - app-network
 
   promtail:
     image: grafana/promtail:2.9.2
-    command: -config.file=/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/docker-config.yaml  # Используем встроенную конфигурацию
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./promtail-config.yml:/etc/promtail/config.yml
     networks:
       - app-network
     depends_on:
@@ -101,12 +100,9 @@ services:
     image: grafana/grafana:latest
     ports:
       - "3001:3000"
-    volumes:
-      - grafana-storage:/var/lib/grafana
     environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true  # Разрешаем анонимный доступ
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_AUTH_DISABLE_LOGIN_FORM=true
     networks:
       - app-network
     depends_on:
