@@ -32,6 +32,11 @@ services:
       - app-network
     depends_on:
       - backend
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
   backend:
     build:
       context: ./backend
@@ -50,6 +55,11 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
   db:
     image: postgres:latest
     environment:
@@ -75,6 +85,10 @@ services:
     command: -config.file=/etc/loki/loki-config.yaml
     volumes:
       - ./metrics/loki-config.yaml:/etc/loki/loki-config.yaml
+    networks:
+      - app-network
+    depends_on:
+      - frontend
 
   promtail:
     image: grafana/promtail:2.9.2
@@ -84,6 +98,10 @@ services:
       - ./metrics/promtail-config.yaml:/etc/promtail/promtail-config.yaml
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - app-network
+    depends_on:
+      - frontend
 
   grafana:
     image: grafana/grafana
@@ -92,6 +110,10 @@ services:
       - "3001:3000"
     volumes:
       - grafana-storage:/var/lib/grafana
+    networks:
+      - app-network
+    depends_on:
+      - frontend
 
 networks:
   app-network:
