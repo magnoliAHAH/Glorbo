@@ -7,6 +7,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+var (
+	requestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
+		},
+		[]string{"path", "method"},
+	)
 )
 
 type FileNode struct {
@@ -15,7 +28,12 @@ type FileNode struct {
 	Children []FileNode `json:"children,omitempty"`
 }
 
+func init() {
+	prometheus.MustRegister(requestsTotal)
+}
+
 func main() {
+	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/api/structure", handleStructure)
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -26,7 +44,7 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 	w.Header().Set("Access-Control-Allow-Methods", "GET")
-
+	requestsTotal.WithLabelValues("/api/structure", r.Method).Inc()
 	// Обработка OPTIONS запросов
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
