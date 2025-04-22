@@ -20,8 +20,7 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
   frontend:
     build:
       context: ./frontend
@@ -35,8 +34,7 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
   backend:
     build:
       context: ./backend
@@ -58,8 +56,7 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: "10m"
-        max-file: "3"
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
   db:
     image: postgres:latest
     environment:
@@ -77,43 +74,59 @@ services:
       interval: 10s
       retries: 5
 
-  loki:
-    image: grafana/loki:2.9.2
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
     ports:
-      - "3100:3100"
-    command: -config.file=/etc/loki/loki-config.yaml  # Конфигурация Loki из папки metrics
+      - "9080:9080"
     volumes:
-      - ./metrics/loki-config.yaml:/etc/loki/loki-config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./metrics/promtail-config.yaml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    privileged: true
     networks:
       - app-network
 
-  promtail:
-    image: grafana/promtail:2.9.2
-    command: -config.file=/etc/promtail/docker-config.yaml  # Конфигурация Promtail из папки metrics
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
     volumes:
-      - ./metrics/docker-config.yaml:/etc/promtail/docker-config.yaml
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ./metrics/loki-config.yaml:/etc/loki/local-config.yaml
     networks:
       - app-network
-    depends_on:
-      - loki
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./metrics/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
+    networks:
+      - app-network
 
   grafana:
     image: grafana/grafana:latest
+    container_name: grafana
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
-      - GF_AUTH_ANONYMOUS_ENABLED=true  # Разрешаем анонимный доступ
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafanadata:/var/lib/grafana
     networks:
       - app-network
-    depends_on:
-      - loki
 
 networks:
   app-network:
     driver: bridge
 
 volumes:
-  grafana-storage:
+  grafanadata:
+  prometheusdata:
