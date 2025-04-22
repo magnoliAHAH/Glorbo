@@ -1,0 +1,20 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 9095
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/api/prom/push # Используем Loki, запущенный в контейнере loki
+
+scrape_configs:
+  - job_name: "docker"
+    pipeline_stages:
+      - docker: {} # Обработка логов в формате Docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log # Логи всех контейнеров

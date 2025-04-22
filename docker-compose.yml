@@ -81,14 +81,17 @@ services:
     image: grafana/loki:2.9.2
     ports:
       - "3100:3100"
-    command: -config.file=/etc/loki/local-config.yaml  # Используем встроенную конфигурацию
+    command: -config.file=/etc/loki/loki-config.yaml  # Конфигурация Loki из папки metrics
+    volumes:
+      - ./metrics/loki-config.yaml:/etc/loki/loki-config.yaml
     networks:
       - app-network
 
   promtail:
     image: grafana/promtail:2.9.2
-    command: -config.file=/etc/promtail/docker-config.yaml  # Используем встроенную конфигурацию
+    command: -config.file=/etc/promtail/docker-config.yaml  # Конфигурация Promtail из папки metrics
     volumes:
+      - ./metrics/docker-config.yaml:/etc/promtail/docker-config.yaml
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
     networks:

@@ -2,31 +2,41 @@ auth_enabled: false
 
 server:
   http_listen_port: 3100
+  grpc_listen_port: 9095
+
+frontend:
+  log_queries_longer_than: 5s
+  max_entries_limit: 500
+  tail_limit: 500
 
 ingester:
-  lifecycler:
-    ring:
-      kvstore:
-        store: inmemory
-      replication_factor: 1
-  chunk_idle_period: 5m
+  chunk_target_size: 1048576
   max_chunk_age: 1h
+  max_streams_per_user: 10000
+  max_entry_size: 1048576
+
+limits_config:
+  enforce_metric_name: false
+  max_line_size: 10240
+  max_streams_per_user: 10000
 
 schema_config:
   configs:
-    - from: 2023-01-01
+    - from: 2020-10-24
       store: boltdb-shipper
       object_store: filesystem
       schema: v11
       index:
-        prefix: index_
+        prefix: loki_index_
         period: 24h
 
 storage_config:
   boltdb_shipper:
-    active_index_directory: /loki/index
-    cache_location: /loki/cache
-    shared_store: filesystem
-
+    active_index_directory: /tmp/loki/index
+    cache_location: /tmp/loki/cache
   filesystem:
-    directory: /loki/chunks
+    directory: /tmp/loki/data # Путь для хранения данных Loki
+
+compactor:
+  working_directory: /tmp/loki/compactor
+  shared_store: filesystem
