@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import Cookies from 'js-cookie';
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
@@ -8,14 +7,9 @@ const Projects = () => {
 
   const fetchProjects = async () => {
     try {
-
-      // Выполняем запрос к API с использованием JWT
+      // Выполняем запрос к API с использованием cookie
       const response = await axios.get('/api/projects', {
-        withCredentials: true,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        withCredentials: true, // Включаем отправку cookie
+        withCredentials: true, // Включаем отправку cookie с запросом
       });
 
       setProjects(response.data.projects);
