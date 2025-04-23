@@ -1,12 +1,16 @@
 package main
 
 import (
+	grpcclient "backend/grpcClient"
+	"context"
 	"encoding/json"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -20,6 +24,7 @@ var (
 		},
 		[]string{"path", "method"},
 	)
+	authClient *grpcclient.Client
 )
 
 type FileNode struct {
@@ -33,8 +38,20 @@ func init() {
 }
 
 func main() {
+	ctx := context.Background()
+	logger := slog.Default()
+	client, err := grpcclient.New(ctx, logger, "localhost:44044", 2*time.Second, 3)
+	if err != nil {
+		log.Fatalf("failsed to init gRPC client: %v", err)
+	}
+	authClient = client
+
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/api/structure", handleStructure)
+
+	http.HandleFunc("/api/register", handleRegister)
+	http.HandleFunc("/api/login", handleLogin)
+
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -116,4 +133,61 @@ func scanDir(path string) (FileNode, error) {
 	}
 
 	return node, nil
+}
+
+func handleRegister(w http.ResponseWriter, r *http.Request) {
+	requestsTotal.WithLabelValues("/api/register", r.Method).Inc()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type reqBody struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	var req reqBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := authClient.Register(r.Context(), req.Email, req.Password)
+	if err != nil {
+		http.Error(w, "Registration failed", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]any{"user_id": userID})
+}
+
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	requestsTotal.WithLabelValues("/api/login", r.Method).Inc()
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type reqBody struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		AppID    int32  `json:"app_id"`
+	}
+
+	var req reqBody
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	token, err := authClient.Login(r.Context(), req.Email, req.Password, req.AppID)
+	if err != nil {
+		http.Error(w, "Login failed", http.StatusUnauthorized)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
