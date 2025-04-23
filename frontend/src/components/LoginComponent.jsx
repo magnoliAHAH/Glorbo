@@ -21,7 +21,7 @@ function LoginForm() {
 
       if (response.ok) {
         const data = await response.json();
-        setResult(`✅ Успешный вход. ID пользователя: ${data.user_id}`);
+        setResult(`✅ Успешный вход. ID пользователя: ${data.token}`);
         // Здесь вы можете сохранить токен или перенаправить пользователя
       } else {
         const errorText = await response.text();
