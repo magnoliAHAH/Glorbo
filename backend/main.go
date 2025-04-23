@@ -2,8 +2,6 @@ package main
 
 import (
 	grpcclient "backend/grpcClient"
-	"strings"
-
 	"context"
 	"encoding/json"
 	"fmt"
@@ -107,51 +105,45 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var tokenString string
+		w.Header().Set("Access-Control-Allow-Origin", "https://supreme-roulette.work.gd")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-		// Проверяем наличие токена в заголовке Authorization
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" {
-			// Если токен передан в заголовке Authorization
-			if strings.HasPrefix(authHeader, "Bearer ") {
-				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-			}
-		} else {
-			// Если токен в заголовке не найден, проверяем куки
-			cookie, err := r.Cookie("token")
-			if err == nil {
-				tokenString = cookie.Value
-			}
+		type contextKey string
+		const userIDKey contextKey = "userID"
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 
-		if tokenString == "" {
+		cookie, err := r.Cookie("token")
+		if err != nil || cookie.Value == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		// Парсим токен
+		tokenString := cookie.Value
 		claims := jwt.MapClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-			// Проверяем алгоритм
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 			}
-			return []byte("test-secret"), nil // Замените на ваш секретный ключ
+			return []byte("test-secret"), nil
 		})
 		if err != nil || !token.Valid {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		// Извлекаем userID из токена
 		userID, ok := claims["sub"].(string)
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		// Добавляем userID в контекст запроса
-		ctx := context.WithValue(r.Context(), "userID", userID)
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -251,6 +243,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		Secure:   true,
 		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	json.NewEncoder(w).Encode(map[string]string{"token": token})

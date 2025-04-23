@@ -1,24 +1,28 @@
 import React, { useState } from 'react';
-import axios from 'axios';
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState(null);
-  const token = document.cookie.replace(/(?:(?:^|.*;\s*)token\s*\=\s*([^;]*).*$)|^.*$/, "$1"); // Получаем токен из куки
 
   const fetchProjects = async () => {
     try {
-      const response = await axios.get('/api/projects', {
+      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+        method: 'GET',
+        credentials: 'include', // Включаем отправку cookie
         headers: {
-          Authorization: `Bearer ${token}`, // Отправляем токен в заголовке
+          'Accept': 'application/json',
         },
-        withCredentials: true, // Включаем отправку cookies
       });
 
-      setProjects(response.data.projects);
+      if (!response.ok) {
+        throw new Error(`Ошибка: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setProjects(data.projects);
       setError(null);
     } catch (err) {
-      setError(err.response?.data?.message || err.message);
+      setError(err.message);
       setProjects([]);
     }
   };
@@ -26,9 +30,7 @@ const Projects = () => {
   return (
     <div>
       <button onClick={fetchProjects}>Загрузить проекты</button>
-
       {error && <p style={{ color: 'red' }}>{error}</p>}
-
       {projects.length > 0 && (
         <ul>
           {projects.map((project, index) => (
