@@ -77,7 +77,7 @@ services:
   migrator:
     build:
       context: ./grpc
-      dockerfile: Dockerfile-migrator
+      dockerfile: Dockerfile.migrator
     ports:
       - "44045:44045"
     networks:

@@ -40,7 +40,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 	logger := slog.Default()
-	client, err := grpcclient.New(ctx, logger, "localhost:44044", 2*time.Second, 3)
+	client, err := grpcclient.New(ctx, logger, "grpcauth:44044", 2*time.Second, 3)
 	if err != nil {
 		log.Fatalf("failsed to init gRPC client: %v", err)
 	}
