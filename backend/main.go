@@ -105,6 +105,7 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// CORS headers
 		w.Header().Set("Access-Control-Allow-Origin", "https://supreme-roulette.work.gd")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -115,41 +116,53 @@ func WithAuth(next http.Handler) http.Handler {
 			return
 		}
 
+		// Получаем токен из куки
 		cookie, err := r.Cookie("token")
 		if err != nil {
+			log.Printf("Cookie error: %v", err)
 			http.Error(w, "Unauthorized: no token cookie", http.StatusUnauthorized)
 			return
 		}
 
 		tokenString := cookie.Value
-		if tokenString == "" {
-			http.Error(w, "Unauthorized: empty token", http.StatusUnauthorized)
-			return
-		}
+		log.Printf("Received token: %s", tokenString)
 
+		// Парсим токен
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return []byte("test-secret"), nil
+			return []byte("test-secret"), nil // Убедитесь, что секрет совпадает!
 		})
-		if err != nil || !token.Valid {
+
+		if err != nil {
+			log.Printf("Token parse error: %v", err)
 			http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		if !token.Valid {
+			log.Println("Token is invalid")
+			http.Error(w, "Unauthorized: token not valid", http.StatusUnauthorized)
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
+			log.Println("Invalid claims format")
 			http.Error(w, "Unauthorized: invalid claims", http.StatusUnauthorized)
 			return
 		}
 
-		userID, ok := claims["sub"].(string)
+		// ВАЖНО: В вашем токене используется uid, а не sub!
+		userID, ok := claims["uid"].(string)
 		if !ok {
+			log.Printf("Claims: %v", claims)
 			http.Error(w, "Unauthorized: no user ID in claims", http.StatusUnauthorized)
 			return
 		}
 
+		log.Printf("Authenticated user: %s", userID)
 		ctx := context.WithValue(r.Context(), "userID", userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
