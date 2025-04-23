@@ -19,6 +19,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+type contextKey string
+
+// 2) Объявляем ключ userIDKey на уровне пакета
+const userIDKey contextKey = "userID"
+
 var (
 	requestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -103,10 +108,6 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(structure)
 }
-
-type contextKey string
-
-const userIDKey contextKey = "userID"
 
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -277,18 +278,29 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
-	// Получаем userID из контекста
-	userID := r.Context().Value("userID").(string)
+	// 1) Извлекаем значение из контекста
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized: no userID in context", http.StatusUnauthorized)
+		return
+	}
 
-	// Логика для получения проектов пользователя
-	// Например, вы можете проверить, что пользователь имеет доступ к своим проектам
-	// Используем userID для фильтрации проектов, связанных с этим пользователем
+	// 2) Приводим к string
+	userID, ok := raw.(string)
+	if !ok {
+		log.Printf("userID in context is not a string: %#v", raw)
+		http.Error(w, "Unauthorized: invalid userID type", http.StatusUnauthorized)
+		return
+	}
 
-	// Пример получения проектов
-	projects := []string{"project1", "project2"} // Пример проектов
+	// 3) Логируем и возвращаем проекты
+	log.Printf("handleProjects for userID=%s", userID)
+	projects := []string{"project1", "project2"}
 
-	// Возвращаем список проектов в формате JSON
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `{"user_id": "%s", "projects": %v}`, userID, projects)
+	json.NewEncoder(w).Encode(map[string]any{
+		"user_id":  userID,
+		"projects": projects,
+	})
 }
