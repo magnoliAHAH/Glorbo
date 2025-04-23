@@ -33,7 +33,7 @@ type Project struct {
 
 func initDB() {
 	var err error
-	db, err = sql.Open("postgres", "postgres://user:password@localhost/dbname?sslmode=disable")
+	db, err = sql.Open("postgres", "postgres://user:password@db/postgres?sslmode=disable")
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
@@ -311,6 +311,11 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 		projects, err := getProjectsByUser(userID)
 		if err != nil {
 			http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
+			return
+		}
+		if len(projects) == 0 {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"message": "У вас нет проектов"})
 			return
 		}
 		json.NewEncoder(w).Encode(projects)
