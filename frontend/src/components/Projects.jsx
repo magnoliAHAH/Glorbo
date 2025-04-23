@@ -8,14 +8,16 @@ const Projects = () => {
     try {
       const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
         method: 'GET',
-        credentials: 'include', // Включаем отправку cookie
+        credentials: 'include', // Важно для отправки cookies
         headers: {
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Ошибка: ${response.status}`);
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Ошибка: ${response.status}`);
       }
 
       const data = await response.json();
@@ -31,13 +33,13 @@ const Projects = () => {
     <div>
       <button onClick={fetchProjects}>Загрузить проекты</button>
       {error && <p style={{ color: 'red' }}>{error}</p>}
-      {projects.length > 0 && (
+      {projects.length > 0 ? (
         <ul>
           {projects.map((project, index) => (
             <li key={index}>{project}</li>
           ))}
         </ul>
-      )}
+      ) : !error && <p>Нет загруженных проектов</p>}
     </div>
   );
 };
