@@ -14,11 +14,14 @@ RUN go mod download
 COPY . .
 
 # Собираем приложение
-RUN go build -o server ./cmd/server
+RUN go build -o migrator ./cmd/migrator
 
-# Открываем порт 44044
-EXPOSE 44044
+# Открываем порт 44045
+EXPOSE 44045
+# Запускаем приложение
+ENV STORAGE_PATH=postgres:password@localhost:5432
+ENV MIGRATIONS_PATH=/app/db/migrations
 
 # Запускаем приложение
-ENTRYPOINT ["/app/server"]
-CMD ["--config=/app/config/prod.yaml"]
+ENTRYPOINT ["/app/migrator"]
+CMD ["--storage-path=postgres:password@db:5432", "--migrations-path=/app/db/migrations"]

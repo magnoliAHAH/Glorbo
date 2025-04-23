@@ -74,6 +74,21 @@ services:
       interval: 10s
       retries: 5
 
+  migrator:
+    build:
+      context: ./grpc
+      dockerfile: Dockerfile-migrator
+    ports:
+      - "44045:44045"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
   grpcauth:
     build:
       context: ./grpc
@@ -83,7 +98,7 @@ services:
     networks:
       - app-network
     depends_on:
-      - backend
+      - migrator
     logging:
       driver: json-file
       options:
