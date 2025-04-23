@@ -12,6 +12,7 @@
   "dependencies": {
     "@improbable-eng/grpc-web": "^0.15.0",
     "@xyflow/react": "^12.5.5",
+    "axios": "^1.8.4",
     "google-protobuf": "^3.21.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
