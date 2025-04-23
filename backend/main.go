@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -103,50 +104,48 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(structure)
 }
 
+type contextKey string
+
+const userIDKey contextKey = "userID"
+
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS headers
+		// 1) CORS-заголовки
 		w.Header().Set("Access-Control-Allow-Origin", "https://supreme-roulette.work.gd")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
+		// 2) Preflight
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		// Получаем токен из куки
+		// 3) Читаем cookie
 		cookie, err := r.Cookie("token")
 		if err != nil {
 			log.Printf("Cookie error: %v", err)
 			http.Error(w, "Unauthorized: no token cookie", http.StatusUnauthorized)
 			return
 		}
-
 		tokenString := cookie.Value
 		log.Printf("Received token: %s", tokenString)
 
-		// Парсим токен
+		// 4) Парсим JWT
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return []byte("test-secret"), nil // Убедитесь, что секрет совпадает!
+			return []byte("test-secret"), nil
 		})
-
-		if err != nil {
-			log.Printf("Token parse error: %v", err)
+		if err != nil || !token.Valid {
+			log.Printf("Token parse/valid error: %v", err)
 			http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
 			return
 		}
 
-		if !token.Valid {
-			log.Println("Token is invalid")
-			http.Error(w, "Unauthorized: token not valid", http.StatusUnauthorized)
-			return
-		}
-
+		// 5) Извлекаем claims
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			log.Println("Invalid claims format")
@@ -154,16 +153,24 @@ func WithAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// ВАЖНО: В вашем токене используется uid, а не sub!
-		userID, ok := claims["uid"].(string)
-		if !ok {
-			log.Printf("Claims: %v", claims)
+		// 6) Читаем uid (он приходит как число)
+		rawUID, exists := claims["uid"]
+		if !exists {
+			log.Printf("Claims missing uid: %v", claims)
 			http.Error(w, "Unauthorized: no user ID in claims", http.StatusUnauthorized)
 			return
 		}
+		uidFloat, ok := rawUID.(float64)
+		if !ok {
+			log.Printf("uid is not a number: %T %#v", rawUID, rawUID)
+			http.Error(w, "Unauthorized: invalid user ID", http.StatusUnauthorized)
+			return
+		}
+		userID := strconv.Itoa(int(uidFloat))
+		log.Printf("Authenticated userID: %s", userID)
 
-		log.Printf("Authenticated user: %s", userID)
-		ctx := context.WithValue(r.Context(), "userID", userID)
+		// 7) Кладём в контекст
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
