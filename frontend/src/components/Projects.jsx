@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [message, setMessage] = useState(null);
+  const navigate = useNavigate();
 
   const fetchProjects = async () => {
     try {
       const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
         method: 'GET',
-        credentials: 'include', // для cookie
+        credentials: 'include',
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
@@ -37,6 +39,10 @@ const Projects = () => {
     }
   };
 
+  const handleClick = (url) => {
+    navigate(`/dashboard?repo=${encodeURIComponent(url)}`);
+  };
+
   return (
     <div>
       <button onClick={fetchProjects}>Загрузить проекты</button>
@@ -47,7 +53,8 @@ const Projects = () => {
         <ul>
           {projects.map((project) => (
             <li key={project.id}>
-              <strong>{project.name}</strong> — <a href={project.url} target="_blank" rel="noopener noreferrer">{project.url}</a>
+              <strong>{project.name}</strong>{' '}
+              <button onClick={() => handleClick(project.url)}>Открыть</button>
             </li>
           ))}
         </ul>
