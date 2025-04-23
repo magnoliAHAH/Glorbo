@@ -2,6 +2,7 @@ package main
 
 import (
 	grpcclient "backend/grpcClient"
+	"strings"
 
 	"context"
 	"encoding/json"
@@ -106,19 +107,29 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Извлекаем cookie с токеном
-		w.Header().Set("Access-Control-Allow-Origin", "*")                   // Замените '*' на ваш домен, если нужно
-		w.Header().Set("Access-Control-Allow-Credentials", "true")           // Разрешаем использование cookies
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Разрешаем нужные методы
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		cookie, err := r.Cookie("token")
-		if err != nil {
+		var tokenString string
+
+		// Проверяем наличие токена в заголовке Authorization
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" {
+			// Если токен передан в заголовке Authorization
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			}
+		} else {
+			// Если токен в заголовке не найден, проверяем куки
+			cookie, err := r.Cookie("token")
+			if err == nil {
+				tokenString = cookie.Value
+			}
+		}
+
+		if tokenString == "" {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
 		// Парсим токен
-		tokenString := cookie.Value
 		claims := jwt.MapClaims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
 			// Проверяем алгоритм

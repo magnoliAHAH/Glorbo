@@ -4,12 +4,15 @@ import axios from 'axios';
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [error, setError] = useState(null);
+  const token = document.cookie.replace(/(?:(?:^|.*;\s*)token\s*\=\s*([^;]*).*$)|^.*$/, "$1"); // Получаем токен из куки
 
   const fetchProjects = async () => {
     try {
-      // Выполняем запрос к API с использованием cookie
       const response = await axios.get('/api/projects', {
-        withCredentials: true, // Включаем отправку cookie с запросом
+        headers: {
+          Authorization: `Bearer ${token}`, // Отправляем токен в заголовке
+        },
+        withCredentials: true, // Включаем отправку cookies
       });
 
       setProjects(response.data.projects);
