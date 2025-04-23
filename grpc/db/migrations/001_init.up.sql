@@ -11,3 +11,10 @@ CREATE TABLE IF NOT EXISTS apps (
     name TEXT NOT NULL UNIQUE,
     secret TEXT NOT NULL UNIQUE
 );
+
+CREATE TABLE projects (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT
+);

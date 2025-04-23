@@ -14,10 +14,30 @@ import (
 	"strconv"
 	"time"
 
+	"database/sql"
+
 	"github.com/golang-jwt/jwt/v5"
+	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
+
+var db *sql.DB
+
+type Project struct {
+	ID     int64  `json:"id"`
+	UserID string `json:"user_id"`
+	Name   string `json:"name"`
+	URL    string `json:"url,omitempty"`
+}
+
+func initDB() {
+	var err error
+	db, err = sql.Open("postgres", "postgres://user:password@localhost/dbname?sslmode=disable")
+	if err != nil {
+		log.Fatalf("Failed to connect to DB: %v", err)
+	}
+}
 
 type contextKey string
 
@@ -48,6 +68,7 @@ func init() {
 func main() {
 	ctx := context.Background()
 	logger := slog.Default()
+	initDB()
 	client, err := grpcclient.New(ctx, logger, "grpcauth:44044", 2*time.Second, 3)
 	if err != nil {
 		log.Fatalf("failsed to init gRPC client: %v", err)
@@ -278,29 +299,66 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
-	// 1) Извлекаем значение из контекста
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
-		http.Error(w, "Unauthorized: no userID in context", http.StatusUnauthorized)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	userID := raw.(string)
 
-	// 2) Приводим к string
-	userID, ok := raw.(string)
-	if !ok {
-		log.Printf("userID in context is not a string: %#v", raw)
-		http.Error(w, "Unauthorized: invalid userID type", http.StatusUnauthorized)
-		return
+	switch r.Method {
+	case http.MethodGet:
+		projects, err := getProjectsByUser(userID)
+		if err != nil {
+			http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(projects)
+
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid input", http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" {
+			http.Error(w, "Project name is required", http.StatusBadRequest)
+			return
+		}
+		if err := createProject(userID, req.Name, req.URL); err != nil {
+			http.Error(w, "Failed to create project", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"status": "created"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
 
-	// 3) Логируем и возвращаем проекты
-	log.Printf("handleProjects for userID=%s", userID)
-	projects := []string{"project1", "project2"}
+func createProject(userID, name, url string) error {
+	_, err := db.Exec("INSERT INTO projects (user_id, name, url) VALUES ($1, $2, $3)", userID, name, url)
+	return err
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]any{
-		"user_id":  userID,
-		"projects": projects,
-	})
+func getProjectsByUser(userID string) ([]Project, error) {
+	rows, err := db.Query("SELECT id, user_id, name, url FROM projects WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []Project
+	for rows.Next() {
+		var p Project
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.URL); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, nil
 }

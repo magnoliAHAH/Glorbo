@@ -9,7 +9,7 @@ const Login = () => {
       Login
       <RegistrationComponent/>
       <LoginForm/>
-      <ModernButton />
+      <ModernButton link='/projects' name="Проекты"/>
     </div>
   )
 }

@@ -28,6 +28,8 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/pty v1.1.8/go.mod h1:O1sed60cT9XZ5uDucP5qwvh+TE3NnUj51EiZO/lmSfw=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
+github.com/lib/pq v1.10.9 h1:YXG7RB+JIjhP29X+OtkiDnYaXQwpS4JEWq7dtCCRUEw=
+github.com/lib/pq v1.10.9/go.mod h1:AlVN5x4E4T544tWzH6hKfbfQvm3HdbOxrmggDNAPY9o=
 github.com/magnoliAHAH/protos v0.0.3 h1:iYknYdoI5wBkz2DAUtsYCu/71k9cY0o0vxehvyoR/ps=
 github.com/magnoliAHAH/protos v0.0.3/go.mod h1:bTqT5SewTKUkvPIl4Bwtmje+7lqSRGRXopAtpi/sMEg=
 github.com/magnoliAHAH/protos-glorbo v0.0.0-20250417094233-55ea28fa1eb6 h1:t41Oq4xMrNSf14DFbp/7Q6DgHccu59G8fRFTGZ/X9kI=
