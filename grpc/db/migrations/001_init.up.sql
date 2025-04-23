@@ -12,9 +12,10 @@ CREATE TABLE IF NOT EXISTS apps (
     secret TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
     id SERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    url TEXT
+    url TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
