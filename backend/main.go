@@ -107,6 +107,10 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Извлекаем cookie с токеном
+		w.Header().Set("Access-Control-Allow-Origin", "*")                   // Замените '*' на ваш домен, если нужно
+		w.Header().Set("Access-Control-Allow-Credentials", "true")           // Разрешаем использование cookies
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Разрешаем нужные методы
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		cookie, err := r.Cookie("token")
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
