@@ -1,0 +1,27 @@
+# Используем официальный образ Go
+FROM golang:1.24-alpine
+
+# Устанавливаем рабочую директорию в контейнере
+WORKDIR /app
+
+# Копируем go.mod и go.sum для установки зависимостей
+COPY go.mod ./
+
+# Устанавливаем зависимости
+RUN go mod download
+
+# Копируем все файлы проекта
+COPY . .
+
+# Собираем приложение
+RUN go build -o migrator ./cmd/migrator
+
+# Открываем порт 44045
+EXPOSE 44045
+# Запускаем приложение
+ENV STORAGE_PATH=postgres:password@localhost:5432
+ENV MIGRATIONS_PATH=/app/db/migrations
+
+# Запускаем приложение
+ENTRYPOINT ["/app/migrator"]
+CMD ["--storage-path=postgres:password@db:5432", "--migrations-path=/app/db/migrations"]
