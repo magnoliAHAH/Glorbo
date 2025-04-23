@@ -21,6 +21,8 @@ require (
 
 require (
 	github.com/emirpasic/gods v1.12.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/kevinburke/ssh_config v0.0.0-20190725054713-01f96b0aa0cd // indirect
 	github.com/magnoliAHAH/protos v0.0.3

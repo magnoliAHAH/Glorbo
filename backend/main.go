@@ -2,8 +2,10 @@ package main
 
 import (
 	grpcclient "backend/grpcClient"
+
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -48,6 +51,8 @@ func main() {
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/api/structure", handleStructure)
+
+	http.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
 
 	http.HandleFunc("/api/register", handleRegister)
 	http.HandleFunc("/api/login", handleLogin)
@@ -97,6 +102,43 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(structure)
+}
+
+func WithAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Извлекаем cookie с токеном
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Парсим токен
+		tokenString := cookie.Value
+		claims := jwt.MapClaims{}
+		token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
+			// Проверяем алгоритм
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return []byte("test-secret"), nil // Замените на ваш секретный ключ
+		})
+		if err != nil || !token.Valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Извлекаем userID из токена
+		userID, ok := claims["sub"].(string)
+		if !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Добавляем userID в контекст запроса
+		ctx := context.WithValue(r.Context(), "userID", userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func scanDir(path string) (FileNode, error) {
@@ -188,6 +230,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Login failed", http.StatusUnauthorized)
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "token",
+		Value:    token,
+		HttpOnly: true,
+		Secure:   true,
+		Path:     "/",
+	})
 
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func handleProjects(w http.ResponseWriter, r *http.Request) {
+	// Получаем userID из контекста
+	userID := r.Context().Value("userID").(string)
+
+	// Логика для получения проектов пользователя
+	// Например, вы можете проверить, что пользователь имеет доступ к своим проектам
+	// Используем userID для фильтрации проектов, связанных с этим пользователем
+
+	// Пример получения проектов
+	projects := []string{"project1", "project2"} // Пример проектов
+
+	// Возвращаем список проектов в формате JSON
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"user_id": "%s", "projects": %v}`, userID, projects)
 }
