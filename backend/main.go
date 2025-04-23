@@ -33,7 +33,7 @@ type Project struct {
 
 func initDB() {
 	var err error
-	db, err = sql.Open("postgres", "postgres://user:password@db/postgres?sslmode=disable")
+	db, err = sql.Open("postgres", "postgres://postgres:password@db/postgres?sslmode=disable")
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
