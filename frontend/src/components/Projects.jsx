@@ -8,14 +8,10 @@ const Projects = () => {
 
   const fetchProjects = async () => {
     try {
-      // Получаем JWT из cookie
-      const token = Cookies.get('token');
-      if (!token) {
-        throw new Error('Токен не найден');
-      }
 
       // Выполняем запрос к API с использованием JWT
       const response = await axios.get('/api/projects', {
+        withCredentials: true,
         headers: {
           Authorization: `Bearer ${token}`,
         },
