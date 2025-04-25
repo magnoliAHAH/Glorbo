@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [message, setMessage] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newProject, setNewProject] = useState({ name: '', url: '' });
   const navigate = useNavigate();
 
   const fetchProjects = async () => {
@@ -12,7 +14,7 @@ const Projects = () => {
         method: 'GET',
         credentials: 'include',
         headers: {
-          'Accept': 'application/json',
+          Accept: 'application/json',
           'Content-Type': 'application/json',
         },
       });
@@ -43,22 +45,98 @@ const Projects = () => {
     navigate(`/dashboard?repo=${encodeURIComponent(url)}`);
   };
 
+  const handleAddProject = async () => {
+    try {
+      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newProject),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Ошибка при добавлении проекта');
+
+      setNewProject({ name: '', url: '' });
+      setShowAddForm(false);
+      fetchProjects();
+    } catch (err) {
+      setMessage(err.message);
+    }
+  };
+
   return (
-    <div>
+    <div style={{ padding: '20px' }}>
       <button onClick={fetchProjects}>Загрузить проекты</button>
-
-      {message && <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>}
-
-      {projects.length > 0 && (
-        <ul>
-          {projects.map((project) => (
-            <li key={project.id}>
-              <strong>{project.name}</strong>{' '}
-              <button onClick={() => handleClick(project.url)}>Открыть</button>
-            </li>
-          ))}
-        </ul>
+    
+      {message && (
+        <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>
       )}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginTop: '20px' }}>
+
+        <div
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            width: '200px',
+            height: '120px',
+            border: '2px dashed #aaa',
+            borderRadius: '12px',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            cursor: 'pointer',
+            fontSize: '2rem',
+            color: '#555',
+          }}
+        >
+          +
+        </div>
+
+        {/* Форма добавления проекта */}
+        {showAddForm && (
+          <div style={{ width: '100%', marginTop: '10px' }}>
+            <input
+              type="text"
+              placeholder="Название проекта"
+              value={newProject.name}
+              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              style={{ marginRight: '10px' }}
+            />
+            <input
+              type="text"
+              placeholder="URL проекта"
+              value={newProject.url}
+              onChange={(e) => setNewProject({ ...newProject, url: e.target.value })}
+              style={{ marginRight: '10px' }}
+            />
+            <button onClick={handleAddProject}>Добавить</button>
+          </div>
+        )}
+
+        {/* Список проектов */}
+        {projects.map((project) => (
+          <div
+            key={project.id}
+            style={{
+              width: '200px',
+              height: '120px',
+              borderRadius: '12px',
+              backgroundColor: '#f5f5f5',
+              padding: '10px',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.1)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <strong>{project.name}</strong>
+            <button onClick={() => handleClick(project.url)}>Открыть</button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
