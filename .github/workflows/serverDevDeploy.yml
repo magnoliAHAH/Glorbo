@@ -20,7 +20,7 @@ jobs:
           go vet
       - name: Lint JS
         run: |
-          cd ../frontend
+          cd ./frontend
           npm install && npm run lint
   deploy:
     needs: lint
