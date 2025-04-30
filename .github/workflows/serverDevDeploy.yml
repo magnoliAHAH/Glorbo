@@ -9,6 +9,20 @@ env:
   PROJECT_DIR: /home/ermin
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint Go
+        run: |
+          cd ./backend
+          go fmt
+          go vet
+          staticcheck
+      - name: Lint JS
+        run: |
+          cd ../frontend
+          npm install && npm run lint
   deploy:
     runs-on: ubuntu-latest
 
