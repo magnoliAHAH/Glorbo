@@ -15,39 +15,21 @@ const isSupportedRepoUrl = (url) =>
   url.startsWith('https://gitlab.com/') ||
   url.startsWith('https://gitverse.ru/');
 
-const LOCAL_STORAGE_KEY = 'projects';
-
 const Projects = () => {
-  const [projects, setProjects] = useState([]);
+  const navigate = useNavigate();
+  const LOCAL_STORAGE_KEY = 'projects';
+
+  const [projects, setProjects] = useState(() => {
+    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  });
+
   const [message, setMessage] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', url: '' });
   const [urlValid, setUrlValid] = useState(null);
-  const navigate = useNavigate();
 
-  // Load projects from localStorage or fetch from API on mount
-  useEffect(() => {
-    const storedProjects = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (storedProjects) {
-      try {
-        const parsedProjects = JSON.parse(storedProjects);
-        if (Array.isArray(parsedProjects)) {
-          setProjects(parsedProjects);
-          return;
-        }
-      } catch {
-        // If parsing fails, proceed to fetch from API
-      }
-    }
-    fetchProjects();
-  }, []);
-
-  // Update localStorage whenever projects state changes
-  useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projects));
-  }, [projects]);
-
-  // Validate URL whenever newProject.url changes
+  // Проверка валидности URL при изменении
   useEffect(() => {
     const raw = newProject.url.trim();
     if (!raw) {
@@ -57,38 +39,47 @@ const Projects = () => {
     }
   }, [newProject.url]);
 
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-      });
+  // Загрузка проектов с сервера при монтировании компонента
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(data.message || `Ошибка: ${response.status}`);
-      }
+        if (!response.ok) {
+          throw new Error(data.message || `Ошибка: ${response.status}`);
+        }
 
-      if (Array.isArray(data)) {
-        setProjects(data);
-        setMessage(null);
-      } else if (data.message) {
+        if (Array.isArray(data)) {
+          setProjects(data);
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+          setMessage(null);
+        } else if (data.message) {
+          setProjects([]);
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          setMessage(data.message);
+        } else {
+          setProjects([]);
+          localStorage.removeItem(LOCAL_STORAGE_KEY);
+          setMessage('Неизвестный формат ответа от сервера');
+        }
+      } catch (err) {
         setProjects([]);
-        setMessage(data.message);
-      } else {
-        setProjects([]);
-        setMessage('Неизвестный формат ответа от сервера');
+        localStorage.removeItem(LOCAL_STORAGE_KEY);
+        setMessage(err.message);
       }
-    } catch (err) {
-      setProjects([]);
-      setMessage(err.message);
-    }
-  };
+    };
+
+    fetchProjects();
+  }, []);
 
   const handleOpen = (url) => {
     navigate(`/dashboard?repo=${encodeURIComponent(url)}`);
@@ -113,8 +104,11 @@ const Projects = () => {
 
       const updatedProjects = [...projects, data];
       setProjects(updatedProjects);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProjects));
+
       setNewProject({ name: '', url: '' });
       setShowAddForm(false);
+      setMessage(null);
     } catch (err) {
       setMessage(err.message);
     }
@@ -136,7 +130,7 @@ const Projects = () => {
           marginTop: '20px',
         }}
       >
-        {/* Button to show/hide the add project form */}
+        {/* Кнопка показать/скрыть форму */}
         <div
           onClick={() => setShowAddForm((prev) => !prev)}
           style={{
@@ -155,7 +149,7 @@ const Projects = () => {
           +
         </div>
 
-        {/* Add project form */}
+        {/* Форма добавления проекта */}
         {showAddForm && (
           <div style={{ width: '100%', marginTop: '10px' }}>
             <input
@@ -192,7 +186,7 @@ const Projects = () => {
           </div>
         )}
 
-        {/* List of projects */}
+        {/* Список проектов */}
         {projects.map((project) => (
           <div
             key={project.id}
