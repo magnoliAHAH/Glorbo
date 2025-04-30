@@ -4,34 +4,70 @@ import Graph from '../components/Graph';
 
 const Dashboard = () => {
   const [structure, setStructure] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const location = useLocation();
   const navigate = useNavigate();
-
   const params = new URLSearchParams(location.search);
-  const urlRepo = params.get('repo');
 
   useEffect(() => {
-    const repo = urlRepo || localStorage.getItem('repo');
+    // Determine repo URL from query or localStorage
+    const urlParam = params.get('repo');
+    const savedRepo = localStorage.getItem('repo');
+    const repo = urlParam || savedRepo;
 
     if (!repo) {
       navigate('/projects');
       return;
     }
 
-    fetch(`https://supreme-roulette.work.gd/api/structure?repo=${repo}`)
-      .then(res => res.json())
-      .then(data => setStructure(data))
-      .catch(err => console.error('Error fetching structure:', err));
-  }, [urlRepo, navigate]);
+    // If repo comes from query, save it
+    if (urlParam && urlParam !== savedRepo) {
+      localStorage.setItem('repo', urlParam);
+    }
+
+    // Fetch project structure
+    setLoading(true);
+    setError(null);
+    fetch(`https://supreme-roulette.work.gd/api/structure?repo=${encodeURIComponent(repo)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || `Ошибка: ${res.status}`);
+        }
+        return data;
+      })
+      .then((data) => {
+        setStructure(data);
+      })
+      .catch((err) => {
+        console.error('Error fetching structure:', err);
+        setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  // Rerun effect when search changes
+  }, [location.search, navigate]);
+
+  const handleChangeRepo = () => {
+    // Clear saved repo and redirect to projects
+    localStorage.removeItem('repo');
+    navigate('/projects');
+  };
 
   return (
-    <div style={{ height: '80vh', width: '100%' }}>
+    <div style={{ padding: '20px', height: '80vh', width: '100%' }}>
       <h2>Dashboard</h2>
-      {structure ? (
+      {loading && <p>Загрузка структуры проекта...</p>}
+      {error && <p style={{ color: 'red' }}>Ошибка: {error}</p>}
+      {!loading && !error && structure && (
         <Graph structure={structure} />
-      ) : (
-        <p>Загрузка структуры проекта...</p>
       )}
+      <button onClick={handleChangeRepo} style={{ marginTop: '15px' }}>
+        Сменить репозиторий
+      </button>
     </div>
   );
 };
