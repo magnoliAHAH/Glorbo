@@ -1,4 +1,3 @@
-// src/components/Projects.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -6,7 +5,7 @@ const isValidUrl = (url) => {
   try {
     new URL(url);
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 };
@@ -24,7 +23,7 @@ const Projects = () => {
   const [urlValid, setUrlValid] = useState(null);
   const navigate = useNavigate();
 
-  // Проверяем URL при каждом изменении
+  // Проверка валидности URL при изменении
   useEffect(() => {
     const raw = newProject.url.trim();
     if (!raw) {
@@ -36,23 +35,19 @@ const Projects = () => {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch(
-        'https://supreme-roulette.work.gd/api/projects',
-        {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
+      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
+
       if (!response.ok) {
         throw new Error(data.message || `Ошибка: ${response.status}`);
       }
-
       if (Array.isArray(data)) {
         setProjects(data);
         setMessage(null);
@@ -75,24 +70,19 @@ const Projects = () => {
 
   const handleAddProject = async () => {
     try {
-      const response = await fetch(
-        'https://supreme-roulette.work.gd/api/projects',
-        {
-          method: 'POST',
-          credentials: 'include',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(newProject),
-        }
-      );
-
+      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newProject),
+      });
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || 'Ошибка при добавлении проекта');
       }
-
       setNewProject({ name: '', url: '' });
       setShowAddForm(false);
       fetchProjects();
@@ -119,7 +109,7 @@ const Projects = () => {
           marginTop: '20px',
         }}
       >
-        {/* Кнопка показать форму */}
+        {/* Кнопка показать/скрыть форму */}
         <div
           onClick={() => setShowAddForm((prev) => !prev)}
           style={{
