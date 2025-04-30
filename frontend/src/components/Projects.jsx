@@ -1,36 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const isValidUrl = (url) => {
-  try {
-    new URL(url);
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
-
-const isSupportedRepoUrl = (url) =>
-  url.startsWith('https://github.com/') ||
-  url.startsWith('https://gitlab.com/') ||
-  url.startsWith('https://gitverse.ru/');
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [message, setMessage] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', url: '' });
-  const [urlValid, setUrlValid] = useState(null);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const { url } = newProject;
-    if (!url.trim()) {
-      setUrlValid(null);
-    } else {
-      setUrlValid(isValidUrl(url) && isSupportedRepoUrl(url));
-    }
-  }, [newProject.url]);
 
   const fetchProjects = async () => {
     try {
@@ -44,7 +20,11 @@ const Projects = () => {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || `Ошибка: ${response.status}`);
+
+      if (!response.ok) {
+        throw new Error(data.message || `Ошибка: ${response.status}`);
+      }
+
       if (Array.isArray(data)) {
         setProjects(data);
         setMessage(null);
@@ -91,10 +71,12 @@ const Projects = () => {
   return (
     <div style={{ padding: '20px' }}>
       <button onClick={fetchProjects}>Загрузить проекты</button>
-
-      {message && <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>}
-
+    
+      {message && (
+        <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginTop: '20px' }}>
+
         <div
           onClick={() => setShowAddForm(!showAddForm)}
           style={{
@@ -130,11 +112,7 @@ const Projects = () => {
               onChange={(e) => setNewProject({ ...newProject, url: e.target.value })}
               style={{ marginRight: '10px' }}
             />
-            {urlValid === true && <span style={{ color: 'green' }}>✔️</span>}
-            {urlValid === false && <span style={{ color: 'red' }}>❌</span>}
-            <button onClick={handleAddProject} disabled={!urlValid}>
-              Добавить
-            </button>
+            <button onClick={handleAddProject}>Добавить</button>
           </div>
         )}
 
