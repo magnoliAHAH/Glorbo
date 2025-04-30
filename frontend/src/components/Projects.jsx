@@ -5,14 +5,15 @@ const isValidUrl = (url) => {
   try {
     new URL(url);
     return true;
-  } catch (_) {
+  } catch (e) {
     return false;
   }
 };
 
-const isSupportedRepoUrl = (url) => {
-  return url.startsWith('https://github.com/') || url.startsWith('https://gitlab.com/') || url.startsWith('https://gitverse.ru/');
-};
+const isSupportedRepoUrl = (url) =>
+  url.startsWith('https://github.com/') ||
+  url.startsWith('https://gitlab.com/') ||
+  url.startsWith('https://gitverse.ru/');
 
 const Projects = () => {
   const [projects, setProjects] = useState([]);
@@ -23,12 +24,11 @@ const Projects = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (newProject.url.trim() === '') {
+    const { url } = newProject;
+    if (!url.trim()) {
       setUrlValid(null);
-    } else if (isValidUrl(newProject.url) && isSupportedRepoUrl(newProject.url)) {
-      setUrlValid(true);
     } else {
-      setUrlValid(false);
+      setUrlValid(isValidUrl(url) && isSupportedRepoUrl(url));
     }
   }, [newProject.url]);
 
@@ -44,11 +44,7 @@ const Projects = () => {
       });
 
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || `Ошибка: ${response.status}`);
-      }
-
+      if (!response.ok) throw new Error(data.message || `Ошибка: ${response.status}`);
       if (Array.isArray(data)) {
         setProjects(data);
         setMessage(null);
@@ -96,11 +92,9 @@ const Projects = () => {
     <div style={{ padding: '20px' }}>
       <button onClick={fetchProjects}>Загрузить проекты</button>
 
-      {message && (
-        <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>
-      )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginTop: '20px' }}>
+      {message && <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>{message}</p>}
 
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px', marginTop: '20px' }}>
         <div
           onClick={() => setShowAddForm(!showAddForm)}
           style={{
