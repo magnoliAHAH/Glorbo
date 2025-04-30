@@ -15,6 +15,8 @@ const isSupportedRepoUrl = (url) =>
   url.startsWith('https://gitlab.com/') ||
   url.startsWith('https://gitverse.ru/');
 
+const LOCAL_STORAGE_KEY = 'projects';
+
 const Projects = () => {
   const [projects, setProjects] = useState([]);
   const [message, setMessage] = useState(null);
@@ -23,7 +25,29 @@ const Projects = () => {
   const [urlValid, setUrlValid] = useState(null);
   const navigate = useNavigate();
 
-  // Проверка валидности URL при изменении
+  // Load projects from localStorage or fetch from API on mount
+  useEffect(() => {
+    const storedProjects = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (storedProjects) {
+      try {
+        const parsedProjects = JSON.parse(storedProjects);
+        if (Array.isArray(parsedProjects)) {
+          setProjects(parsedProjects);
+          return;
+        }
+      } catch {
+        // If parsing fails, proceed to fetch from API
+      }
+    }
+    fetchProjects();
+  }, []);
+
+  // Update localStorage whenever projects state changes
+  useEffect(() => {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(projects));
+  }, [projects]);
+
+  // Validate URL whenever newProject.url changes
   useEffect(() => {
     const raw = newProject.url.trim();
     if (!raw) {
@@ -43,11 +67,13 @@ const Projects = () => {
           'Content-Type': 'application/json',
         },
       });
+
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || `Ошибка: ${response.status}`);
       }
+
       if (Array.isArray(data)) {
         setProjects(data);
         setMessage(null);
@@ -79,13 +105,16 @@ const Projects = () => {
         },
         body: JSON.stringify(newProject),
       });
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || 'Ошибка при добавлении проекта');
       }
+
+      const updatedProjects = [...projects, data];
+      setProjects(updatedProjects);
       setNewProject({ name: '', url: '' });
       setShowAddForm(false);
-      fetchProjects();
     } catch (err) {
       setMessage(err.message);
     }
@@ -93,8 +122,6 @@ const Projects = () => {
 
   return (
     <div style={{ padding: '20px' }}>
-      <button onClick={fetchProjects}>Загрузить проекты</button>
-
       {message && (
         <p style={{ color: message.startsWith('Ошибка') ? 'red' : 'black' }}>
           {message}
@@ -109,7 +136,7 @@ const Projects = () => {
           marginTop: '20px',
         }}
       >
-        {/* Кнопка показать/скрыть форму */}
+        {/* Button to show/hide the add project form */}
         <div
           onClick={() => setShowAddForm((prev) => !prev)}
           style={{
@@ -128,7 +155,7 @@ const Projects = () => {
           +
         </div>
 
-        {/* Форма добавления проекта */}
+        {/* Add project form */}
         {showAddForm && (
           <div style={{ width: '100%', marginTop: '10px' }}>
             <input
@@ -165,7 +192,7 @@ const Projects = () => {
           </div>
         )}
 
-        {/* Список проектов */}
+        {/* List of projects */}
         {projects.map((project) => (
           <div
             key={project.id}
