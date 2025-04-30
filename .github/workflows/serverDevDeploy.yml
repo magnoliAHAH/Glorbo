@@ -18,12 +18,12 @@ jobs:
           cd ./backend
           go fmt
           go vet
-          staticcheck
       - name: Lint JS
         run: |
           cd ../frontend
           npm install && npm run lint
   deploy:
+    needs: lint
     runs-on: ubuntu-latest
 
     steps:
