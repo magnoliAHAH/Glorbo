@@ -17,19 +17,13 @@ const isSupportedRepoUrl = (url) =>
 
 const Projects = () => {
   const navigate = useNavigate();
-  const LOCAL_STORAGE_KEY = 'projects';
 
-  const [projects, setProjects] = useState(() => {
-    const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  });
-
+  const [projects, setProjects] = useState([]);
   const [message, setMessage] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', url: '' });
   const [urlValid, setUrlValid] = useState(null);
 
-  // Проверка валидности URL при изменении
   useEffect(() => {
     const raw = newProject.url.trim();
     if (!raw) {
@@ -39,7 +33,6 @@ const Projects = () => {
     }
   }, [newProject.url]);
 
-  // Загрузка проектов с сервера при монтировании компонента
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -60,20 +53,16 @@ const Projects = () => {
 
         if (Array.isArray(data)) {
           setProjects(data);
-          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
           setMessage(null);
         } else if (data.message) {
           setProjects([]);
-          localStorage.removeItem(LOCAL_STORAGE_KEY);
           setMessage(data.message);
         } else {
           setProjects([]);
-          localStorage.removeItem(LOCAL_STORAGE_KEY);
           setMessage('Неизвестный формат ответа от сервера');
         }
       } catch (err) {
         setProjects([]);
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
         setMessage(err.message);
       }
     };
@@ -104,7 +93,6 @@ const Projects = () => {
 
       const updatedProjects = [...projects, data];
       setProjects(updatedProjects);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updatedProjects));
 
       setNewProject({ name: '', url: '' });
       setShowAddForm(false);
@@ -130,7 +118,6 @@ const Projects = () => {
           marginTop: '20px',
         }}
       >
-        {/* Кнопка показать/скрыть форму */}
         <div
           onClick={() => setShowAddForm((prev) => !prev)}
           style={{
@@ -149,7 +136,6 @@ const Projects = () => {
           +
         </div>
 
-        {/* Форма добавления проекта */}
         {showAddForm && (
           <div style={{ width: '100%', marginTop: '10px' }}>
             <input
@@ -171,14 +157,10 @@ const Projects = () => {
               style={{ marginRight: '10px' }}
             />
             {urlValid === true && (
-              <span style={{ color: 'green', marginRight: '10px' }}>
-                ✔️
-              </span>
+              <span style={{ color: 'green', marginRight: '10px' }}>✔️</span>
             )}
             {urlValid === false && (
-              <span style={{ color: 'red', marginRight: '10px' }}>
-                ❌
-              </span>
+              <span style={{ color: 'red', marginRight: '10px' }}>❌</span>
             )}
             <button onClick={handleAddProject} disabled={!urlValid}>
               Добавить
@@ -186,7 +168,6 @@ const Projects = () => {
           </div>
         )}
 
-        {/* Список проектов */}
         {projects.map((project) => (
           <div
             key={project.id}
