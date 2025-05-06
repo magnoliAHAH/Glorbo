@@ -59,7 +59,7 @@ function LoginForm() {
           App ID:
           <input
             type="password"
-            value={password}
+            value={app_id}
             onChange={(e) => setApp_id(e.target.value)}
             required
             style={{ width: '100%', marginBottom: '1rem' }}
