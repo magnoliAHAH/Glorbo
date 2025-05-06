@@ -60,7 +60,7 @@ function LoginForm() {
           <input
             type="number"
             value={app_id}
-            onChange={(e) => setApp_id(e.target.value)}
+            onChange={(e) => setApp_id(parseInt(e.target.value, 10) || 0)}
             required
             style={{ width: '100%', marginBottom: '1rem' }}
           />
