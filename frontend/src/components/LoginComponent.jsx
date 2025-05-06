@@ -58,7 +58,7 @@ function LoginForm() {
         <label>
           App ID:
           <input
-            type="password"
+            type="number"
             value={app_id}
             onChange={(e) => setApp_id(e.target.value)}
             required
