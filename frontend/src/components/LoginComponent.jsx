@@ -4,7 +4,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [result, setResult] = useState('');
-  const [app_id, setApp_id] = useState(0)
+  const [app_id, setApp_id] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault();
