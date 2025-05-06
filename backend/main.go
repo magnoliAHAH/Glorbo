@@ -244,6 +244,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	type reqBody struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		AppID    int32  `json:"app_id"`
 	}
 
 	var req reqBody
@@ -252,7 +253,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID, err := authClient.Register(r.Context(), req.Email, req.Password)
+	userID, err := authClient.Register(r.Context(), req.Email, req.Password, req.AppID)
 	if err != nil {
 		http.Error(w, "Registration failed", http.StatusInternalServerError)
 		return

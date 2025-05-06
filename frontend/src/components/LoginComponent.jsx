@@ -4,7 +4,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [result, setResult] = useState('');
-  const app_id = 1
+  const [app_id, setApp_id] = useState(0)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -51,6 +51,16 @@ function LoginForm() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ width: '100%', marginBottom: '1rem' }}
+          />
+        </label>
+        <label>
+          App ID:
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setApp_id(e.target.value)}
             required
             style={{ width: '100%', marginBottom: '1rem' }}
           />

@@ -54,12 +54,13 @@ func New(
 
 }
 
-func (c *Client) Register(ctx context.Context, email, password string) (int64, error) {
+func (c *Client) Register(ctx context.Context, email, password string, appID int32) (int64, error) {
 	const op = "auth.Register"
 
 	resp, err := c.api.Register(ctx, &ssov1.RegisterRequest{
 		Email:    email,
 		Password: password,
+		AppId:    appID,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)

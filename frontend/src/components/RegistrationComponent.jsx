@@ -4,6 +4,7 @@ function RegistrationComponent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [result, setResult] = useState('');
+  const [app_id, setApp_id] = useState(0)
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -15,7 +16,7 @@ function RegistrationComponent() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, app_id }),
       });
 
       if (response.ok) {
@@ -54,9 +55,20 @@ function RegistrationComponent() {
             style={{ width: '100%', marginBottom: '1rem' }}
           />
         </label>
+        <label>
+          App ID:
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setApp_id(e.target.value)}
+            required
+            style={{ width: '100%', marginBottom: '1rem' }}
+          />
+        </label>
         <button type="submit" style={{ width: '100%' }}>
           Зарегистрироваться
         </button>
+
       </form>
       {result && (
         <div style={{ marginTop: '1rem', whiteSpace: 'pre-wrap' }}>{result}</div>
