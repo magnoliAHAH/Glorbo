@@ -29,7 +29,15 @@ function RegistrationComponent() {
     } catch (error) {
       setResult(`❌ Ошибка запроса: ${error.message}`);
     }
+    console.log('Отправляем:', {
+      email,
+      password,
+      app_id,
+      json: JSON.stringify({ email, password, app_id })
+    });
+    
   };
+  
 
   return (
     <div style={{ maxWidth: '400px', margin: '2rem auto', fontFamily: 'Arial' }}>
