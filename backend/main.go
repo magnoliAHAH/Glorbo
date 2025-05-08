@@ -99,7 +99,7 @@ func main() {
 	http.HandleFunc("/api/register", handleRegister)
 	http.HandleFunc("/api/login", handleLogin)
 
-	http.Handle("/api/auth-services", WithAuth(http.HandlerFunc(handleCreateAuthService)))
+	http.Handle("/api/auth-service", WithAuth(http.HandlerFunc(handleCreateAuthService)))
 
 	http.Handle("/api/users", WithAuth(http.HandlerFunc(getUsersHandler)))
 
@@ -321,15 +321,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
-	requestsTotal.WithLabelValues("/api/auth-service", r.Method).Inc()
+	// Инкрементируем метрику
+	requestsTotal.WithLabelValues("/api/auth-services", r.Method).Inc()
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Декодируем тело запроса
 	var req AuthServiceRequest
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+
+	// Генерируем секрет и создаем запись в БД
 	secret := generateSecret()
-	createAuthService(req.Name, secret, req.ProjectID)
+	if err := createAuthService(req.Name, secret, req.ProjectID); err != nil {
+		http.Error(w, "Failed to create auth service", http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем клиенту секрет
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"secret": secret})
 }
@@ -405,10 +420,48 @@ func getProjectsByUser(userID string) ([]Project, error) {
 }
 
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+	// Инкрементируем метрику
 	requestsTotal.WithLabelValues("/api/users", r.Method).Inc()
-	var req UsersRequest
-	json.NewDecoder(r.Body).Decode(&req)
-	users, _ := getUsersByProjectID(int32(req.ProjectID))
+
+	var projectID int32
+	switch r.Method {
+	case http.MethodGet:
+		// Читаем project_id из query-параметра
+		pid := r.URL.Query().Get("project_id")
+		if pid == "" {
+			http.Error(w, "Missing project_id query param", http.StatusBadRequest)
+			return
+		}
+		id, err := strconv.Atoi(pid)
+		if err != nil {
+			http.Error(w, "Invalid project_id", http.StatusBadRequest)
+			return
+		}
+		projectID = int32(id)
+
+	case http.MethodPost:
+		// Читаем из JSON в теле
+		var req UsersRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request payload", http.StatusBadRequest)
+			return
+		}
+		projectID = req.ProjectID
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Получаем пользователей
+	users, err := getUsersByProjectID(projectID)
+	if err != nil {
+		http.Error(w, "Failed to fetch users", http.StatusInternalServerError)
+		return
+	}
+
+	// Возвращаем JSON
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
 
