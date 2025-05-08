@@ -99,7 +99,7 @@ func main() {
 	http.HandleFunc("/api/register", handleRegister)
 	http.HandleFunc("/api/login", handleLogin)
 
-	http.Handle("/api/projects/auth-service", WithAuth(http.HandlerFunc(handleCreateAuthService)))
+	http.HandleFunc("/api/projects/auth-service", handleCreateAuthService)
 	http.Handle("/api/projects/users", WithAuth(http.HandlerFunc(getUsersHandler)))
 
 	log.Println("Server running on http://localhost:8080")
@@ -320,6 +320,10 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "GET")
 	requestsTotal.WithLabelValues("/api/projects/auth-service", r.Method).Inc()
 
 	if r.Method != http.MethodPost {
@@ -403,17 +407,50 @@ func getProjectsByUser(userID string) ([]Project, error) {
 }
 
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
-	requestsTotal.WithLabelValues("/api/projects/users", r.Method).Inc()
-
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
+	userID := raw.(string)
 
-	// Просто отвечаем kek
-	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("kek"))
+	switch r.Method {
+	case http.MethodGet:
+		projects, err := getProjectsByUser(userID)
+		if err != nil {
+			http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
+			return
+		}
+		if len(projects) == 0 {
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{"message": "У вас нет проектов"})
+			return
+		}
+		json.NewEncoder(w).Encode(projects)
+
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid input", http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" {
+			http.Error(w, "Project name is required", http.StatusBadRequest)
+			return
+		}
+		if err := createProject(userID, req.Name, req.URL); err != nil {
+			http.Error(w, "Failed to create project", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{"status": "created"})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 func getUsersByProjectID(projectID int32) ([]User, error) {
