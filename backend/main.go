@@ -353,7 +353,7 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(projects) == 0 {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"message": "У вас нет проектов"})
+			json.NewEncoder(w).Encode(map[string]string{"message": "У вас нет проектов2"})
 			return
 		}
 		json.NewEncoder(w).Encode(projects)
