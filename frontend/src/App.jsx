@@ -14,26 +14,27 @@ import Assistant from './pages/Assistant'
 import Cicd from './pages/Cicd'
 
 
+
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/projects" element={<ProjectsList />} />
-        <Route path="/login" element={<Login/>}/>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/projects" element={<ProjectsList />} />
+          <Route path="/login" element={<Login/>}/>
 
-        <Route element={<MainLayout/>}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/authentication" element={<Authentication />} />
-          <Route path="/debug" element={<Debug/>} />
-          <Route path="/deploy" element={<Deploy/>} />
-          <Route path="/analitics" element={<Analitics/>} />
-          <Route path="/assistant" element={<Assistant/>} />
-          <Route path="/cicd" element={<Cicd/>} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+          <Route element={<MainLayout/>}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/authentication" element={<Authentication />} />
+            <Route path="/debug" element={<Debug/>} />
+            <Route path="/deploy" element={<Deploy/>} />
+            <Route path="/analitics" element={<Analitics/>} />
+            <Route path="/assistant" element={<Assistant/>} />
+            <Route path="/cicd" element={<Cicd/>} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
   )
 }
 

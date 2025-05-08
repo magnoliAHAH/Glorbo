@@ -3,6 +3,9 @@ package main
 import (
 	grpcclient "backend/grpcClient"
 	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +17,7 @@ import (
 	"strconv"
 	"time"
 
-	"database/sql"
+	"github.com/gorilla/mux"
 
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq"
@@ -29,6 +32,12 @@ type Project struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	URL    string `json:"url,omitempty"`
+}
+
+type User struct {
+	ID    int32
+	Email string
+	AppID int32
 }
 
 func initDB() {
@@ -74,6 +83,7 @@ func main() {
 		log.Fatalf("failsed to init gRPC client: %v", err)
 	}
 	authClient = client
+	router := mux.NewRouter()
 
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/api/structure", handleStructure)
@@ -82,6 +92,16 @@ func main() {
 
 	http.HandleFunc("/api/register", handleRegister)
 	http.HandleFunc("/api/login", handleLogin)
+
+	router.Handle(
+		"/api/projects/{project_id}/auth-services",
+		WithAuth(http.HandlerFunc(handleCreateAuthService)),
+	)
+
+	router.Handle(
+		"/api/projects/{project_id}/users",
+		WithAuth(http.HandlerFunc(getUsersHandler)),
+	)
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -299,6 +319,69 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
 }
 
+func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
+	// Увеличиваем счётчик метрик Prometheus
+	requestsTotal.WithLabelValues("/api/authService", r.Method).Inc()
+
+	// Проверяем метод запроса
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Извлекаем userID из контекста
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID := raw.(string)
+
+	// Декодируем тело запроса
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, "App name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Генерируем уникальный секрет
+	secret := generateSecret()
+
+	// Получаем список проектов пользователя
+	projects, err := getProjectsByUser(userID)
+	if err != nil {
+		http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
+		return
+	}
+	if len(projects) == 0 {
+		http.Error(w, "No projects found for user", http.StatusBadRequest)
+		return
+	}
+
+	// Используем первый проект пользователя
+	vars := mux.Vars(r)
+	projectID := vars["project_id"]
+
+	// Создаём запись в базе данных
+	if err := createAuthService(req.Name, secret, projectID); err != nil {
+		http.Error(w, "Failed to create auth service", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем успешный ответ
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "created",
+		"secret": secret,
+	})
+}
+
 func handleProjects(w http.ResponseWriter, r *http.Request) {
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
@@ -367,4 +450,74 @@ func getProjectsByUser(userID string) ([]Project, error) {
 		projects = append(projects, p)
 	}
 	return projects, nil
+}
+
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+	// Увеличиваем счётчик метрик (маршрут теперь /api/projects/{project_id}/users)
+	requestsTotal.WithLabelValues("/api/projects/{project_id}/users", r.Method).Inc()
+
+	// Извлекаем project_id из URL-пути
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok || projectIDStr == "" {
+		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
+		return
+	}
+
+	// Преобразуем в число
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		http.Error(w, "Invalid project_id", http.StatusBadRequest)
+		return
+	}
+
+	// Берём пользователей из БД
+	users, err := getUsersByProjectID(int32(projectID))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching users: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Отдаём JSON
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(users); err != nil {
+		http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+
+func getUsersByProjectID(projectID int32) ([]User, error) {
+	rows, err := db.Query(`
+		SELECT u.id, u.email, u.app_id
+		FROM users u
+		JOIN apps a ON u.app_id = a.id
+		WHERE a.project_id = $1
+	`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.AppID); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+func createAuthService(name, secret, projectID string) error {
+	_, err := db.Exec("INSERT INTO apps (name, secret, project_id) VALUES ($1, $2, $3)", name, secret, projectID)
+	return err
+}
+
+func generateSecret() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("Failed to generate secret: %v", err)
+	}
+	return hex.EncodeToString(b)
 }

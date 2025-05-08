@@ -7,6 +7,7 @@ require gopkg.in/src-d/go-git.v4 v4.13.1
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.1 // indirect
 	github.com/magnoliAHAH/protos-glorbo v0.0.0-20250504155157-47472d5a118e // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

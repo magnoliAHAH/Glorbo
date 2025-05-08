@@ -4,6 +4,8 @@ const Authentication = () => {
   return (
     <div>
       Authentication
+      <CreateAuthService />
+      <UsersList />
     </div>
   )
 }
