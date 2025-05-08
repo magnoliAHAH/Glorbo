@@ -85,13 +85,13 @@ func main() {
 	authClient = client
 	router := mux.NewRouter()
 
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/api/structure", handleStructure)
+	router.Handle("/metrics", promhttp.Handler())
+	router.HandleFunc("/api/structure", handleStructure)
 
-	http.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
+	router.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
 
-	http.HandleFunc("/api/register", handleRegister)
-	http.HandleFunc("/api/login", handleLogin)
+	router.HandleFunc("/api/register", handleRegister)
+	router.HandleFunc("/api/login", handleLogin)
 
 	router.Handle(
 		"/api/projects/{project_id}/auth-services",
@@ -104,7 +104,7 @@ func main() {
 	)
 
 	log.Println("Server running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
 
 func handleStructure(w http.ResponseWriter, r *http.Request) {
