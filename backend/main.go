@@ -83,7 +83,7 @@ func main() {
 		log.Fatalf("failsed to init gRPC client: %v", err)
 	}
 	authClient = client
-	router := mux.NewRouter()
+	router := mux.NewRouter().StrictSlash(true)
 
 	router.Handle("/metrics", promhttp.Handler())
 	router.HandleFunc("/api/structure", handleStructure)
