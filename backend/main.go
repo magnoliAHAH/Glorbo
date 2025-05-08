@@ -17,8 +17,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/gorilla/mux"
-
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
@@ -32,6 +30,15 @@ type Project struct {
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
 	URL    string `json:"url,omitempty"`
+}
+
+type AuthServiceRequest struct {
+	ProjectID int32  `json:"project_id"`
+	Name      string `json:"name"`
+}
+
+type UsersRequest struct {
+	ProjectID int32 `json:"project_id"`
 }
 
 type User struct {
@@ -83,28 +90,21 @@ func main() {
 		log.Fatalf("failsed to init gRPC client: %v", err)
 	}
 	authClient = client
-	router := mux.NewRouter().StrictSlash(true)
 
-	router.Handle("/metrics", promhttp.Handler())
-	router.HandleFunc("/api/structure", handleStructure)
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/api/structure", handleStructure)
 
-	router.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
+	http.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
 
-	router.HandleFunc("/api/register", handleRegister)
-	router.HandleFunc("/api/login", handleLogin)
+	http.HandleFunc("/api/register", handleRegister)
+	http.HandleFunc("/api/login", handleLogin)
 
-	router.Handle(
-		"/api/projects/{project_id}/auth-services",
-		WithAuth(http.HandlerFunc(handleCreateAuthService)),
-	).Methods("POST", "OPTIONS")
+	http.Handle("/api/auth-services", WithAuth(http.HandlerFunc(handleCreateAuthService)))
 
-	router.Handle(
-		"/api/projects/{project_id}/users",
-		WithAuth(http.HandlerFunc(getUsersHandler)),
-	).Methods("GET", "OPTIONS")
+	http.Handle("/api/users", WithAuth(http.HandlerFunc(getUsersHandler)))
 
 	log.Println("Server running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 
 }
 
@@ -321,66 +321,17 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
-	// Увеличиваем счётчик метрик Prometheus
-	requestsTotal.WithLabelValues("/api/authService", r.Method).Inc()
-
-	// Проверяем метод запроса
+	requestsTotal.WithLabelValues("/api/auth-service", r.Method).Inc()
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-
-	// Извлекаем userID из контекста
-	raw := r.Context().Value(userIDKey)
-	if raw == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	userID := raw.(string)
-
-	// Декодируем тело запроса
-	var req struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "App name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Генерируем уникальный секрет
+	var req AuthServiceRequest
+	json.NewDecoder(r.Body).Decode(&req)
 	secret := generateSecret()
-
-	// Получаем список проектов пользователя
-	projects, err := getProjectsByUser(userID)
-	if err != nil {
-		http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
-		return
-	}
-	if len(projects) == 0 {
-		http.Error(w, "No projects found for user", http.StatusBadRequest)
-		return
-	}
-
-	// Используем первый проект пользователя
-	vars := mux.Vars(r)
-	projectID := vars["project_id"]
-
-	// Создаём запись в базе данных
-	if err := createAuthService(req.Name, secret, projectID); err != nil {
-		http.Error(w, "Failed to create auth service", http.StatusInternalServerError)
-		return
-	}
-
-	// Отправляем успешный ответ
+	createAuthService(req.Name, secret, req.ProjectID)
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "created",
-		"secret": secret,
-	})
+	json.NewEncoder(w).Encode(map[string]string{"secret": secret})
 }
 
 func handleProjects(w http.ResponseWriter, r *http.Request) {
@@ -454,37 +405,11 @@ func getProjectsByUser(userID string) ([]Project, error) {
 }
 
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
-	// Увеличиваем счётчик метрик (маршрут теперь /api/projects/{project_id}/users)
-	requestsTotal.WithLabelValues("/api/projects/{project_id}/users", r.Method).Inc()
-
-	// Извлекаем project_id из URL-пути
-	vars := mux.Vars(r)
-	projectIDStr, ok := vars["project_id"]
-	if !ok || projectIDStr == "" {
-		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
-		return
-	}
-
-	// Преобразуем в число
-	projectID, err := strconv.Atoi(projectIDStr)
-	if err != nil {
-		http.Error(w, "Invalid project_id", http.StatusBadRequest)
-		return
-	}
-
-	// Берём пользователей из БД
-	users, err := getUsersByProjectID(int32(projectID))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error fetching users: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Отдаём JSON
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(users); err != nil {
-		http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
-		return
-	}
+	requestsTotal.WithLabelValues("/api/users", r.Method).Inc()
+	var req UsersRequest
+	json.NewDecoder(r.Body).Decode(&req)
+	users, _ := getUsersByProjectID(int32(req.ProjectID))
+	json.NewEncoder(w).Encode(users)
 }
 
 func getUsersByProjectID(projectID int32) ([]User, error) {
@@ -510,7 +435,7 @@ func getUsersByProjectID(projectID int32) ([]User, error) {
 	return users, nil
 }
 
-func createAuthService(name, secret, projectID string) error {
+func createAuthService(name, secret string, projectID int32) error {
 	_, err := db.Exec("INSERT INTO apps (name, secret, project_id) VALUES ($1, $2, $3)", name, secret, projectID)
 	return err
 }
