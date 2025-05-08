@@ -96,15 +96,16 @@ func main() {
 	router.Handle(
 		"/api/projects/{project_id}/auth-services",
 		WithAuth(http.HandlerFunc(handleCreateAuthService)),
-	)
+	).Methods("POST", "OPTIONS")
 
 	router.Handle(
 		"/api/projects/{project_id}/users",
 		WithAuth(http.HandlerFunc(getUsersHandler)),
-	)
+	).Methods("GET", "OPTIONS")
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
+
 }
 
 func handleStructure(w http.ResponseWriter, r *http.Request) {
