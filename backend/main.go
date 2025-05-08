@@ -99,8 +99,8 @@ func main() {
 	http.HandleFunc("/api/register", handleRegister)
 	http.HandleFunc("/api/login", handleLogin)
 
+	http.Handle("/api/users", WithAuth(http.HandlerFunc(handleProjects)))
 	http.HandleFunc("/api/projects/auth-service", handleCreateAuthService)
-	http.Handle("/api/projects/users", WithAuth(http.HandlerFunc(getUsersHandler)))
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
