@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { fetchProjects } from '../functions/api/fetchProjects';
 
 const isValidUrl = (url) => {
   try {
@@ -34,40 +35,12 @@ const Projects = () => {
   }, [newProject.url]);
 
   useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
-          method: 'GET',
-          credentials: 'include',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-          },
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.message || `Ошибка: ${response.status}`);
-        }
-
-        if (Array.isArray(data)) {
-          setProjects(data);
-          setMessage(null);
-        } else if (data.message) {
-          setProjects([]);
-          setMessage(data.message);
-        } else {
-          setProjects([]);
-          setMessage('Неизвестный формат ответа от сервера');
-        }
-      } catch (err) {
-        setProjects([]);
-        setMessage(err.message);
-      }
+    const load = async () => {
+      const { projects, message } = await fetchProjects();
+      setProjects(projects);
+      setMessage(message);
     };
-
-    fetchProjects();
+    load();
   }, []);
 
   const handleOpen = (url) => {

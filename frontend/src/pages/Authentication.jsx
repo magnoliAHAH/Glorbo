@@ -5,7 +5,7 @@ const Authentication = () => {
   return (
     <div>
       Authentication
-      <CreateAuthServiceForm/>
+      
     </div>
   )
 }
