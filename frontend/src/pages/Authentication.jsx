@@ -1,6 +1,7 @@
 import React from 'react'
 import CreateAuthServiceForm from '../components/CreateAuthServiceForm'
-import ProjectUsers from '../components/ProjectUsers'
+import ProjectUsersList from '../components/ProjectUsersList'
+
 
 
 const Authentication = () => {
@@ -8,7 +9,7 @@ const Authentication = () => {
     <div>
       Authentication
       <CreateAuthServiceForm/>
-      <ProjectUsers/>
+      <ProjectUsersList/>
     </div>
   )
 }
