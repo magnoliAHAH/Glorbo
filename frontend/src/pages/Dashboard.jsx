@@ -19,10 +19,6 @@ const Dashboard = () => {
       return;
     }
 
-    // If repo comes from query, save it
-    if (urlParam && urlParam !== savedRepo) {
-      localStorage.setItem('repo', urlParam);
-    }
 
     // Fetch project structure
     setLoading(true);
