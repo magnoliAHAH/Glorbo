@@ -1,24 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { useProject } from '../context/ProjectContext';
+import { useNavigate } from 'react-router-dom';
 
 const CreateAuthServiceForm = () => {
-  const { currentProject } = useProject();
+  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [status, setStatus] = useState(null);
   const [secret, setSecret] = useState(null);
 
-  // Если проект не выбран — просим выбрать его
-  if (!currentProject) {
-    return <p>Сначала выберите проект на странице “Проекты”.</p>;
-  }
+  // Получаем projectId из localStorage
+  const projectId = localStorage.getItem('projectId');
+
+  // Если projectId отсутствует, просим выбрать проект
+  useEffect(() => {
+    if (!projectId) {
+      navigate('/projects'); // Перенаправляем на страницу с проектами
+    }
+  }, [projectId, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('Идёт создание...');
     try {
       const res = await axios.post(
-        `/api/projects/${currentProject.id}/auth-services`,
+        `/api/projects/${projectId}/auth-services`,
         { name },
         { withCredentials: true }
       );
@@ -32,7 +37,7 @@ const CreateAuthServiceForm = () => {
 
   return (
     <form onSubmit={handleSubmit} style={{ maxWidth: 400 }}>
-      <h3>Создать Auth Service для проекта “{currentProject.name}”</h3>
+      <h3>Создать Auth Service для проекта</h3>
 
       <div style={{ marginBottom: 12 }}>
         <label>
