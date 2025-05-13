@@ -44,7 +44,8 @@ const Projects = () => {
   }, []);
 
   const handleOpen = (url) => {
-    navigate(`/dashboard?repo=${encodeURIComponent(url)}`);
+    localStorage.setItem('repo', url);
+    navigate(`/dashboard`);
   };
 
   const handleAddProject = async () => {

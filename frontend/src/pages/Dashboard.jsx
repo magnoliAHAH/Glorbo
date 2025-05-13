@@ -9,13 +9,10 @@ const Dashboard = () => {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const params = new URLSearchParams(location.search);
 
   useEffect(() => {
-    // Determine repo URL from query or localStorage
-    const urlParam = params.get('repo');
     const savedRepo = localStorage.getItem('repo');
-    const repo = urlParam || savedRepo;
+    const repo = savedRepo;
 
     if (!repo) {
       navigate('/projects');
