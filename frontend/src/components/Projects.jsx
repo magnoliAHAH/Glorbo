@@ -43,8 +43,9 @@ const Projects = () => {
     load();
   }, []);
 
-  const handleOpen = (url) => {
+  const handleOpen = (url, id) => {
     localStorage.setItem('repo', url);
+    localStorage.setItem('projectId', id);
     navigate(`/dashboard`);
   };
 
@@ -158,7 +159,7 @@ const Projects = () => {
             }}
           >
             <strong>{project.name}</strong>
-            <button onClick={() => handleOpen(project.url)}>Открыть</button>
+            <button onClick={() => handleOpen(project.url, project.id)}>Открыть</button>
           </div>
         ))}
       </div>
