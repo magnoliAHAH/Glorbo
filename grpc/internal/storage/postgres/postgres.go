@@ -34,14 +34,14 @@ func New(storagePath string) (*Storage, error) {
 	}, nil
 }
 
-func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
+func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte, appID int) (int64, error) {
 	const op = "storage.postgres.SaveUser"
 
-	query := `INSERT INTO users (email, pass_hash) VALUES ($1, $2) RETURNING id`
+	query := `INSERT INTO users (email, pass_hash, app_id) VALUES ($1, $2, $3) RETURNING id`
 
 	var id int64
 	// Используем QueryRowContext для выполнения запроса
-	err := s.db.QueryRow(ctx, query, email, passHash).Scan(&id)
+	err := s.db.QueryRow(ctx, query, email, passHash, appID).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		// Обработка ошибки уникальности (23505 - уникальное нарушение)

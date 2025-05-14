@@ -8,6 +8,7 @@ import (
 	"grpc-SSO/internal/lib/jwt"
 	"grpc-SSO/internal/storage"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -28,6 +29,7 @@ type UserSaver interface {
 		ctx context.Context,
 		email string,
 		passHash []byte,
+		appID int,
 	) (uid int64, err error)
 }
 
@@ -114,12 +116,14 @@ func (a *Auth) RegisterNewUser(
 	ctx context.Context,
 	email string,
 	password string,
+	appID int,
 ) (int64, error) {
 	const op = "auth.RegisterNewUser"
 
 	log := a.log.With(
 		slog.String("op", op),
 		slog.String("email", email),
+		slog.String("app_id", strconv.Itoa(int(appID))),
 	)
 
 	log.Info("registering user")
@@ -131,7 +135,7 @@ func (a *Auth) RegisterNewUser(
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	id, err := a.usrSaver.SaveUser(ctx, email, passHash)
+	id, err := a.usrSaver.SaveUser(ctx, email, passHash, appID)
 	if err != nil {
 		if errors.Is(err, storage.ErrUserExists) {
 			log.Warn("user already exists", slog.String("error", err.Error()))

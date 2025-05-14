@@ -4,6 +4,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 
 	ssov1 "github.com/magnoliAHAH/protos-glorbo/gen"
 	"google.golang.org/grpc"
@@ -22,6 +23,7 @@ type Auth interface {
 		ctx context.Context,
 		email string,
 		password string,
+		appID int,
 	) (userID int64, err error)
 }
 
@@ -59,7 +61,7 @@ func (s *serverAPI) Register(
 	if err := validateRegister(req); err != nil {
 		return nil, err
 	}
-	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword())
+	userID, err := s.auth.RegisterNewUser(ctx, req.GetEmail(), req.GetPassword(), int(req.GetAppId()))
 	if err != nil {
 		return nil, status.Error(codes.Internal, "internal error")
 	}
@@ -96,6 +98,12 @@ func validateRegister(req *ssov1.RegisterRequest) error {
 
 	if req.GetPassword() == "" {
 		return status.Error(codes.InvalidArgument, "password is required")
+	}
+
+	appID := req.GetAppId()
+	fmt.Printf("Received app_id: %d\n", appID) // Add this line
+	if appID == 0 {
+		return status.Error(codes.InvalidArgument, "app_id is required")
 	}
 	return nil
 }

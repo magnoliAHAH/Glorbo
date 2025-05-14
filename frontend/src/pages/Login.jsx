@@ -1,6 +1,5 @@
 import React from 'react'
 import ModernButton from '../components/ModernButton'
-import TerminalInput from '../components/TerminalInput'
 import RegistrationComponent from '../components/RegistrationComponent'
 import LoginForm from '../components/LoginComponent'
 
@@ -10,7 +9,7 @@ const Login = () => {
       Login
       <RegistrationComponent/>
       <LoginForm/>
-      <ModernButton />
+      <ModernButton link='/projects' name="Проекты"/>
     </div>
   )
 }

@@ -18,6 +18,7 @@ const Sidebar = () => {
         <Logo>🚀 DevTools</Logo>
 
         <NavLinks>
+
           <NavItem to="/dashboard">
             <FiHome />
             Dashboard
@@ -34,7 +35,7 @@ const Sidebar = () => {
             <FiUpload />
             Deploy
           </NavItem>
-          <NavItem to="/analitics">
+          <NavItem to="/analytics">
             <FiBarChart2 />
             AI Analytics
           </NavItem>
@@ -42,56 +43,59 @@ const Sidebar = () => {
             <FiSettings />
             CI/CD
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/monitoring">
+            <FiBarChart2 />
+            Monitoring
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/logs">
+            <FiTool />
+            Logs & Traces
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/tests">
+            <FiCpu />
+            Auto Tests
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/docs">
+            <FiUpload />
+            Docs Generator
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/linter">
+            <FiTool />
+            Linter & Formatter
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/performance">
+            <FiBarChart2 />
+            Performance
           </NavItem>
-
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/terminal">
+            <FiCpu />
+            Cloud Terminal
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/secrets">
+            <FiLock />
+            Secrets Manager
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/webhooks">
+            <FiUpload />
+            Webhooks
           </NavItem>
-          <NavItem to="/cicd">
-            <FiSettings />
-            CI/CD
+          <NavItem to="/editor">
+            <FiTool />
+            Online Editor
           </NavItem>
-          <NavItem to="/cicd">
+          <NavItem to="/notifications">
             <FiSettings />
-            CI/CD
+            Notifications
           </NavItem>
-          
+          <NavItem to="/integrations">
+            <FiCpu />
+            Integrations
+          </NavItem>
           <NavItem to="/assistant">
             <FiCpu />
             AI Assistant
           </NavItem>
+
         </NavLinks>
       </TopSection>
 

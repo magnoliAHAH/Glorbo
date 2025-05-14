@@ -30,6 +30,4 @@ const Main = styled.main`
   overflow-y: scroll; /* Форсированный скролл */
 `;
 
-
-
 export default MainLayout;

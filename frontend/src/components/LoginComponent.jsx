@@ -4,7 +4,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [result, setResult] = useState('');
-  const app_id = 1
+  const [app_id, setApp_id] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,8 +21,7 @@ function LoginForm() {
 
       if (response.ok) {
         const data = await response.json();
-        setResult(`✅ Успешный вход. ID пользователя: ${data.user_id}`);
-        // Здесь вы можете сохранить токен или перенаправить пользователя
+        setResult(`✅ Успешный вход. ID пользователя: ${data.token}`);
       } else {
         const errorText = await response.text();
         setResult(`❌ Ошибка входа: ${errorText}`);
@@ -52,6 +51,16 @@ function LoginForm() {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ width: '100%', marginBottom: '1rem' }}
+          />
+        </label>
+        <label>
+          App ID:
+          <input
+            type="number"
+            value={app_id}
+            onChange={(e) => setApp_id(parseInt(e.target.value, 10) || 0)}
             required
             style={{ width: '100%', marginBottom: '1rem' }}
           />
