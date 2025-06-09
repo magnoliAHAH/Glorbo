@@ -6,7 +6,7 @@ on:
 
 env:
   SSH_PORT: 22
-  PROJECT_DIR: /home/ermin
+  PROJECT_DIR: /root
 
 jobs:
   deploy:
@@ -23,5 +23,13 @@ jobs:
           username: ${{ secrets.SSH_K3S_USERNAME }}
           key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
-            pwd
-            uname
+            rm -rf Glorbo
+            git clone https://github.com/magnoliAHAH/Glorbo.git
+            cd ~/Glorbo/backend/
+            docker build -t glorbo-backend:latest .
+            docker tag glorbo-backend:latest mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
+            cd ~/Glorbo/frontend/
+            docker build -t glorbo-frontend:latest .
+            docker tag glorbo-frontend:latest mixail.ermin33.fvds.ru:31339/glorbo-frontend:latest
+            cd Glorbo/k3s-setup/
+            kubectl apply -f *.yaml

@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom'
 const Home = () => {
   return (
     <div>
-      Home
+      Home2
       <Link to="/login">
         login
       </Link>

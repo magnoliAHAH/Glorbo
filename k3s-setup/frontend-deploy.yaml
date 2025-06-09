@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:02
+          image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:latest
           ports:
             - containerPort: 3000
           readinessProbe:
