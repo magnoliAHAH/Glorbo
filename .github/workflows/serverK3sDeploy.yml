@@ -5,38 +5,37 @@ on:
     branches: [k3s]
 
 env:
-  SSH_HOST: ${{ secrets.SSH_K3S_HOST }}
-  SSH_USERNAME: ${{ secrets.SSH_K3S_USERNAME }}
-  SSH_PRIVATE_KEY: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
   KUBERNETES_NAMESPACE: glorbo-app
   REGISTRY_URL: mixail.ermin33.fvds.ru:31339
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      REGISTRY_URL: mixail.ermin33.fvds.ru:31339
+      KUBERNETES_NAMESPACE: glorbo-app
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          REGISTRY_URL: ${{ env.REGISTRY_URL }}
+          KUBERNETES_NAMESPACE: ${{ env.KUBERNETES_NAMESPACE }}
         with:
-          host: ${{ env.SSH_HOST }}
-          username: ${{ env.SSH_USERNAME }}
-          key: ${{ env.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
-            # Удаляем старый репозиторий, клонируем заново
             rm -rf Glorbo
             git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
 
-            # Сборка backend
             cd Glorbo/backend
             docker build -t $REGISTRY_URL/glorbo-backend:latest .
             docker push $REGISTRY_URL/glorbo-backend:latest
 
-            # Сборка frontend
             cd ../frontend
             docker build -t $REGISTRY_URL/glorbo-frontend:latest .
             docker push $REGISTRY_URL/glorbo-frontend:latest
 
-            # Деплой в k3s (с заменой тегов на latest)
             cd ../k3s-setup
             sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:latest|" backend-deploy.yaml
             sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:latest|" frontend-deploy.yaml
