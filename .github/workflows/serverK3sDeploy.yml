@@ -24,7 +24,7 @@ jobs:
           key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
             rm -rf Glorbo
-            git clone https://github.com/magnoliAHAH/Glorbo.git
+            git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
             cd ~/Glorbo/backend/
             docker build -t glorbo-backend:latest .
             docker tag glorbo-backend:latest mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
