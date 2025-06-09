@@ -1,0 +1,27 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [k3s]
+
+env:
+  SSH_PORT: 22
+  PROJECT_DIR: /home/ermin
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            pwd
+            uname

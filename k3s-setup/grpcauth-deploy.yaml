@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcauth
+  namespace: glorbo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grpcauth
+  template:
+    metadata:
+      labels:
+        app: grpcauth
+    spec:
+      containers:
+        - name: grpcauth
+          image: mixail.ermin33.fvds.ru:31339/glorbo-grpcauth:01
+          ports:
+            - containerPort: 44044
+          readinessProbe:
+            tcpSocket:
+              port: 44044
+            initialDelaySeconds: 5
+            periodSeconds: 10

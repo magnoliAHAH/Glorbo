@@ -8,7 +8,7 @@ function CreateProjectForm() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const res = await fetch("https://supreme-roulette.work.gd/api/projects", {
+    const res = await fetch("https://mixail.ermin33.fvds.ru/api/projects", {
       method: "POST",
       credentials: "include", // обязательно, чтобы отправить cookie с JWT
       headers: {

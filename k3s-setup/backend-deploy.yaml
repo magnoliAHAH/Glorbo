@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: glorbo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: mixail.ermin33.fvds.ru:31339/glorbo-backend:01
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SSL_CERT_PATH
+              value: "/app/certs/server.crt"
+            - name: SSL_KEY_PATH
+              value: "/app/certs/server.key"
+            - name: DATABASE_URL
+              value: "postgres://postgres:password@db:5432/telegram_bot?sslmode=disable"
+            - name: API_SECRET
+              value: "dev_5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+            - name: PORT
+              value: "8080"
+      restartPolicy: Always

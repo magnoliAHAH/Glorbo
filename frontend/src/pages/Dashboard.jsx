@@ -23,7 +23,7 @@ const Dashboard = () => {
     // Fetch project structure
     setLoading(true);
     setError(null);
-    fetch(`https://supreme-roulette.work.gd/api/structure?repo=${encodeURIComponent(repo)}`)
+    fetch(`https://mixail.ermin33.fvds.ru/api/structure?repo=${encodeURIComponent(repo)}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) {
