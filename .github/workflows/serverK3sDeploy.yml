@@ -36,10 +36,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Docker login
-        run: |
-          echo "${{ secrets.DOCKER_REGISTRY_PASSWORD }}" | docker login ${{ secrets.DOCKER_REGISTRY_URL }} -u ${{ secrets.DOCKER_REGISTRY_USERNAME }} --password-stdin
-
       - name: Build and push backend image
         run: |
           cd backend
@@ -74,13 +70,9 @@ jobs:
           key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
             cd Glorbo/k3s-setup
-            # Обновляем образ backend
             sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-backend:.*|image: $BACKEND_IMAGE|" backend-deploy.yaml
-            # Обновляем образ frontend
             sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:.*|image: $FRONTEND_IMAGE|" frontend-deploy.yaml
-            # Применяем backend
             kubectl apply -f backend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/backend -n $KUBERNETES_NAMESPACE
-            # Применяем frontend
             kubectl apply -f frontend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/frontend -n $KUBERNETES_NAMESPACE
