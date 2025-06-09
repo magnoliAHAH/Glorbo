@@ -1,0 +1,148 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
+  frontend:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:latest
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
+  backend:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - SSL_CERT_PATH=/app/certs/server.crt
+      - SSL_KEY_PATH=/app/certs/server.key
+      - DATABASE_URL=postgres://postgres:password@db:5432/telegram_bot?sslmode=disable
+      - API_SECRET=...
+      - PORT=8080
+    networks:
+      - app-network
+    depends_on:
+      - db
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
+  db:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-db:latest
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: glorbo
+      TZ: Europe/Moscow
+      PGTZ: Europe/Moscow
+    networks:
+      - app-network
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      retries: 5
+
+  migrator:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-migrator:latest
+    ports:
+      - "44045:44045"
+    networks:
+      - app-network
+    depends_on:
+      - backend
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
+  grpcauth:
+    image: mixail.ermin33.fvds.ru:31339/glorbo-grpcauth:latest
+    ports:
+      - "44044:44044"
+    networks:
+      - app-network
+    depends_on:
+      - migrator
+    logging:
+      driver: json-file
+      options:
+        tag: "{{.ImageName}}|{{.Name}}|{{.ImageFullID}}|{{.FullID}}"
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    ports:
+      - "9080:9080"
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./metrics/promtail-config.yaml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    privileged: true
+    networks:
+      - app-network
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./metrics/loki-config.yaml:/etc/loki/local-config.yaml
+    networks:
+      - app-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./metrics/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheusdata:/prometheus
+    networks:
+      - app-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./metrics/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafanadata:/var/lib/grafana
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  grafanadata:
+  prometheusdata:

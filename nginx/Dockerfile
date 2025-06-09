@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-ENV SITE_NAME=${SITE_NAME}
+ENV SITE_NAME=mixail.ermin33.fvds.ru
 
 # Копирование Nginx deb пакетов
 COPY nginx* /tmp
@@ -24,14 +24,16 @@ RUN mkdir -p /var/run/nginx
 COPY nginx.conf /etc/nginx/nginx.conf
 RUN chmod 755 /etc/nginx/nginx.conf
 # Создаём структуру каталогов для веб-сайта
-RUN mkdir -p /var/www/${SITE_NAME}/html
+RUN mkdir -p /var/www/mixail.ermin33.fvds.ru/html
 # Копируем конфиг для сайта
 RUN mkdir -p /etc/nginx/sites-available/ && \
     mkdir -p /etc/nginx/sites-enabled/
-COPY ${SITE_NAME}.conf /etc/nginx/sites-available/${SITE_NAME}.conf
+
+ARG SITE_NAME
+COPY mixail.ermin33.fvds.ru.conf /etc/nginx/sites-available/mixail.ermin33.fvds.ru.conf
 
 # Создаём символическую ссылку для активации сайта
-RUN ln -s /etc/nginx/sites-available/${SITE_NAME}.conf /etc/nginx/sites-enabled/
+RUN ln -s /etc/nginx/sites-available/mixail.ermin33.fvds.ru.conf /etc/nginx/sites-enabled/
 
 # Создаём структуру каталогов для хранения сертификатов
 RUN mkdir -p /etc/letsencrypt/live /etc/letsencrypt/archive /etc/letsencrypt/certbot

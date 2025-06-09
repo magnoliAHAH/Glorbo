@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpcauth
+  namespace: glorbo-app
+spec:
+  selector:
+    app: grpcauth
+  ports:
+    - protocol: TCP
+      port: 44044
+      targetPort: 44044

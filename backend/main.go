@@ -153,7 +153,7 @@ func handleStructure(w http.ResponseWriter, r *http.Request) {
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1) CORS-заголовки
-		w.Header().Set("Access-Control-Allow-Origin", "https://supreme-roulette.work.gd")
+		w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")

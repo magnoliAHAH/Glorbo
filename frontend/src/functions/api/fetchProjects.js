@@ -1,6 +1,6 @@
 export const fetchProjects = async () => {
     try {
-      const response = await fetch('https://supreme-roulette.work.gd/api/projects', {
+      const response = await fetch('https://mixail.ermin33.fvds.ru/api/projects', {
         method: 'GET',
         credentials: 'include',
         headers: {

@@ -11,7 +11,7 @@ function RegistrationComponent() {
     setResult(''); // Сброс предыдущего результата
 
     try {
-      const response = await fetch('https://supreme-roulette.work.gd/api/register', {
+      const response = await fetch('https://mixail.ermin33.fvds.ru/api/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

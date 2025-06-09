@@ -17,7 +17,7 @@ const ProjectUsersList = () => {
 
       try {
         const response = await fetch(
-          `https://supreme-roulette.work.gd/api/projects/${projectId}/users`,
+          `https://mixail.ermin33.fvds.ru/api/projects/${projectId}/users`,
           {
             credentials: 'include', // важно для передачи cookie с токеном
           }

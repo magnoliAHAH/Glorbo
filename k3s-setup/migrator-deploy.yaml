@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: migrator
+  namespace: glorbo-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: migrator
+  template:
+    metadata:
+      labels:
+        app: migrator
+    spec:
+      containers:
+        - name: migrator
+          image: mixail.ermin33.fvds.ru:31339/glorbo-migrator:01
+          ports:
+            - containerPort: 44045
+          readinessProbe:
+            tcpSocket:
+              port: 44045
+            initialDelaySeconds: 5
+            periodSeconds: 10

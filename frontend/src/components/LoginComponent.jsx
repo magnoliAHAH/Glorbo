@@ -11,7 +11,7 @@ function LoginForm() {
     setResult(''); // Сброс предыдущего результата
 
     try {
-      const response = await fetch('https://supreme-roulette.work.gd/api/login', {
+      const response = await fetch('https://mixail.ermin33.fvds.ru/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
