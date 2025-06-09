@@ -29,50 +29,41 @@ jobs:
           npm install
           npm run lint
 
-  build_and_push:
+  build_push_deploy:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout code (optional, можно без него)
         uses: actions/checkout@v4
 
-      - name: Build and push backend image
-        run: |
-          cd backend
-          docker build -t $BACKEND_IMAGE .
-          docker push $BACKEND_IMAGE
-
-      - name: Build and push frontend image
-        run: |
-          cd frontend
-          docker build -t $FRONTEND_IMAGE .
-          docker push $FRONTEND_IMAGE
-
-  deploy:
-    needs: build_and_push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clean old repo and clone branch k3s on server
+      - name: Build, push images and deploy on server via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USERNAME }}
           key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
+            # Обновляем код на сервере
             rm -rf Glorbo
             git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
 
-      - name: Deploy backend and frontend to k3s via SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ env.SSH_HOST }}
-          username: ${{ env.SSH_USERNAME }}
-          key: ${{ env.SSH_PRIVATE_KEY }}
-          script: |
-            cd Glorbo/k3s-setup
+            # Строим backend и пушим
+            cd Glorbo/backend
+            docker build -t $BACKEND_IMAGE .
+            docker push $BACKEND_IMAGE
+
+            # Строим frontend и пушим
+            cd ../frontend
+            docker build -t $FRONTEND_IMAGE .
+            docker push $FRONTEND_IMAGE
+
+            # Обновляем манифесты и деплоим в k3s
+            cd ../k3s-setup
             sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-backend:.*|image: $BACKEND_IMAGE|" backend-deploy.yaml
             sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:.*|image: $FRONTEND_IMAGE|" frontend-deploy.yaml
+
             kubectl apply -f backend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/backend -n $KUBERNETES_NAMESPACE
+
             kubectl apply -f frontend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/frontend -n $KUBERNETES_NAMESPACE
