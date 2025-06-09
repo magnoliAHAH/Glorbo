@@ -5,7 +5,7 @@ import { HomeLayout } from '../layouts/HomeLayout';
 const Home = () => (
   <HomeLayout>
     <div style={{ padding: '20px', color: '#eee' }}>
-      <h1>Welcome to K3s Deployment Dashboard</h1>
+      <h1>Welcome to Glorbo Deployment Dashboard</h1>
       <p>Перенос инфраструктуры проекта из Docker Compose в K3s.</p>
       <Link to="/login" style={{
         display: 'inline-block',
