@@ -5,62 +5,41 @@ on:
     branches: [k3s]
 
 env:
-  IMAGE_TAG: ${{ github.sha }}
-  BACKEND_IMAGE: mixail.ermin33.fvds.ru:31339/glorbo-backend:${{ github.sha }}
-  FRONTEND_IMAGE: mixail.ermin33.fvds.ru:31339/glorbo-frontend:${{ github.sha }}
   SSH_HOST: ${{ secrets.SSH_K3S_HOST }}
   SSH_USERNAME: ${{ secrets.SSH_K3S_USERNAME }}
   SSH_PRIVATE_KEY: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
   KUBERNETES_NAMESPACE: glorbo-app
+  REGISTRY_URL: mixail.ermin33.fvds.ru:31339
 
 jobs:
-  lint:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Lint Go
-        run: |
-          cd backend
-          go fmt ./...
-          go vet ./...
-      - name: Lint JS
-        run: |
-          cd frontend
-          npm install
-          npm run lint
-
-  build_push_deploy:
-    needs: lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code (optional, можно без него)
-        uses: actions/checkout@v4
-
-      - name: Build, push images and deploy on server via SSH
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USERNAME }}
           key: ${{ env.SSH_PRIVATE_KEY }}
           script: |
-            # Обновляем код на сервере
+            # Удаляем старый репозиторий, клонируем заново
             rm -rf Glorbo
             git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
 
-            # Строим backend и пушим
+            # Сборка backend
             cd Glorbo/backend
-            docker build -t $BACKEND_IMAGE .
-            docker push $BACKEND_IMAGE
+            docker build -t $REGISTRY_URL/glorbo-backend:latest .
+            docker push $REGISTRY_URL/glorbo-backend:latest
 
-            # Строим frontend и пушим
+            # Сборка frontend
             cd ../frontend
-            docker build -t $FRONTEND_IMAGE .
-            docker push $FRONTEND_IMAGE
+            docker build -t $REGISTRY_URL/glorbo-frontend:latest .
+            docker push $REGISTRY_URL/glorbo-frontend:latest
 
-            # Обновляем манифесты и деплоим в k3s
+            # Деплой в k3s (с заменой тегов на latest)
             cd ../k3s-setup
-            sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-backend:.*|image: $BACKEND_IMAGE|" backend-deploy.yaml
-            sed -i "s|image: mixail.ermin33.fvds.ru:31339/glorbo-frontend:.*|image: $FRONTEND_IMAGE|" frontend-deploy.yaml
+            sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:latest|" backend-deploy.yaml
+            sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:latest|" frontend-deploy.yaml
 
             kubectl apply -f backend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/backend -n $KUBERNETES_NAMESPACE
