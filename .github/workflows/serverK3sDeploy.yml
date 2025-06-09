@@ -41,6 +41,7 @@ jobs:
           username: ${{ secrets.SSH_K3S_USERNAME }}
           key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
+            echo "Using VERSION=$VERSION and REGISTRY_URL=$REGISTRY_URL"
             cd Glorbo/backend/
             docker build -t glorbo-backend:latest .
             docker tag glorbo-backend:latest $REGISTRY_URL/glorbo-backend:latest
@@ -58,6 +59,7 @@ jobs:
           username: ${{ secrets.SSH_K3S_USERNAME }}
           key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
+            echo "Using VERSION=$VERSION and REGISTRY_URL=$REGISTRY_URL"
             cd Glorbo/frontend/
             docker build -t glorbo-frontend:latest .
             docker tag glorbo-frontend:latest $REGISTRY_URL/glorbo-frontend:latest
@@ -75,7 +77,7 @@ jobs:
           username: ${{ secrets.SSH_K3S_USERNAME }}
           key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
           script: |
-            # Заменяем образы на версии с тегом VERSION
+            echo "Updating manifests with VERSION=$VERSION and REGISTRY_URL=$REGISTRY_URL"
             sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:$VERSION|" Glorbo/k3s-setup/backend-deploy.yaml
             sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:$VERSION|" Glorbo/k3s-setup/frontend-deploy.yaml
 
