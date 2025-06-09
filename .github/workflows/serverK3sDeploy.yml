@@ -16,7 +16,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Clean old repo and clone branch k3s
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_K3S_HOST }}
@@ -25,10 +25,36 @@ jobs:
           script: |
             rm -rf Glorbo
             git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
-            cd ~/Glorbo/backend/
+
+      - name: Build and push backend image
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            cd Glorbo/backend/
             docker build -t glorbo-backend:latest .
             docker tag glorbo-backend:latest mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
-            cd ~/Glorbo/frontend/
+            docker push mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
+
+      - name: Build and push frontend image
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            cd Glorbo/frontend/
             docker build -t glorbo-frontend:latest .
             docker tag glorbo-frontend:latest mixail.ermin33.fvds.ru:31339/glorbo-frontend:latest
-            kubectl apply -f ~/Glorbo/k3s-setup/
+            docker push mixail.ermin33.fvds.ru:31339/glorbo-frontend:latest
+
+      - name: Apply Kubernetes manifests
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            kubectl apply -f Glorbo/k3s-setup/
