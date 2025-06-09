@@ -5,21 +5,24 @@ on:
     branches: [k3s]
 
 env:
-  KUBERNETES_NAMESPACE: glorbo-app
+  SSH_PORT: 22
+  PROJECT_DIR: /root
   REGISTRY_URL: mixail.ermin33.fvds.ru:31339
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      REGISTRY_URL: mixail.ermin33.fvds.ru:31339
-      KUBERNETES_NAMESPACE: glorbo-app
+
     steps:
-      - name: Deploy via SSH
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set version tag from git commit SHA
+        id: vars
+        run: echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Clean old repo and clone branch k3s
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          REGISTRY_URL: ${{ env.REGISTRY_URL }}
-          KUBERNETES_NAMESPACE: ${{ env.KUBERNETES_NAMESPACE }}
         with:
           host: ${{ secrets.SSH_K3S_HOST }}
           username: ${{ secrets.SSH_K3S_USERNAME }}
@@ -28,20 +31,56 @@ jobs:
             rm -rf Glorbo
             git clone --branch k3s https://github.com/magnoliAHAH/Glorbo.git
 
-            cd Glorbo/backend
-            docker build -t $REGISTRY_URL/glorbo-backend:latest .
+      - name: Build and push backend image
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          VERSION: ${{ env.VERSION }}
+          REGISTRY_URL: ${{ env.REGISTRY_URL }}
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            cd Glorbo/backend/
+            docker build -t glorbo-backend:latest .
+            docker tag glorbo-backend:latest $REGISTRY_URL/glorbo-backend:latest
+            docker tag glorbo-backend:latest $REGISTRY_URL/glorbo-backend:$VERSION
             docker push $REGISTRY_URL/glorbo-backend:latest
+            docker push $REGISTRY_URL/glorbo-backend:$VERSION
 
-            cd ../frontend
-            docker build -t $REGISTRY_URL/glorbo-frontend:latest .
+      - name: Build and push frontend image
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          VERSION: ${{ env.VERSION }}
+          REGISTRY_URL: ${{ env.REGISTRY_URL }}
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            cd Glorbo/frontend/
+            docker build -t glorbo-frontend:latest .
+            docker tag glorbo-frontend:latest $REGISTRY_URL/glorbo-frontend:latest
+            docker tag glorbo-frontend:latest $REGISTRY_URL/glorbo-frontend:$VERSION
             docker push $REGISTRY_URL/glorbo-frontend:latest
+            docker push $REGISTRY_URL/glorbo-frontend:$VERSION
 
-            cd ../k3s-setup
-            sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:latest|" backend-deploy.yaml
-            sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:latest|" frontend-deploy.yaml
+      - name: Apply Kubernetes manifests
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          VERSION: ${{ env.VERSION }}
+          REGISTRY_URL: ${{ env.REGISTRY_URL }}
+        with:
+          host: ${{ secrets.SSH_K3S_HOST }}
+          username: ${{ secrets.SSH_K3S_USERNAME }}
+          key: ${{ secrets.SSH_K3S_PRIVATE_KEY }}
+          script: |
+            # Заменяем образы на версии с тегом VERSION
+            sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:$VERSION|" Glorbo/k3s-setup/backend-deploy.yaml
+            sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:$VERSION|" Glorbo/k3s-setup/frontend-deploy.yaml
 
-            kubectl apply -f backend-deploy.yaml -n $KUBERNETES_NAMESPACE
-            kubectl rollout status deployment/backend -n $KUBERNETES_NAMESPACE
+            kubectl apply -f Glorbo/k3s-setup/backend-deploy.yaml
+            kubectl rollout status deployment/backend -n glorbo-app
 
-            kubectl apply -f frontend-deploy.yaml -n $KUBERNETES_NAMESPACE
-            kubectl rollout status deployment/frontend -n $KUBERNETES_NAMESPACE
+            kubectl apply -f Glorbo/k3s-setup/frontend-deploy.yaml
+            kubectl rollout status deployment/frontend -n glorbo-app
