@@ -141,8 +141,7 @@ export function renderFileNodeForSidebar(node, depth = 0) {
     } else if (node.type === 'repo') {
         icon = '📦';
         typeText = 'Repository';
-        details.push(<div key="r-url">**URL:** {node.URL || 'N/A'}</div>);
-        // Здесь мы уже не ожидаем .Int64, так как projectId может быть просто числом
+        details.push(<div key="r-url">**URL:** {node.url || 'N/A'}</div>); // <--- ИЗМЕНИТЬ ЗДЕСЬ
         if (node.projectId) details.push(<div key="r-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
     } else if (node.type === 'file') {
         typeText = 'File';
