@@ -245,7 +245,14 @@ const DashboardForMain = () => {
     useEffect(() => {
         const storedProjectId = localStorage.getItem('projectId');
         if (storedProjectId) {
-            setCurrentProjectId(Number(storedProjectId));
+            const parsedProjectId = Number(storedProjectId);
+            // Убедимся, что projectId является валидным положительным числом
+            if (!isNaN(parsedProjectId) && parsedProjectId > 0) {
+                setCurrentProjectId(parsedProjectId);
+            } else {
+                console.warn('Invalid Project ID found in localStorage:', storedProjectId, '. Redirecting to projects.');
+                navigate('/projects');
+            }
         } else {
             console.warn('Project ID not found in localStorage! Redirecting to projects.');
             navigate('/projects');
@@ -258,8 +265,9 @@ const DashboardForMain = () => {
             navigate('/projects');
             return;
         }
-        // Ждем, пока currentProjectId будет установлен
-        if (currentProjectId === null) {
+        // Ждем, пока currentProjectId будет установлен и валиден
+        if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+            console.log('Waiting for valid currentProjectId to load repo tree. Current:', currentProjectId);
             return;
         }
 
@@ -282,7 +290,7 @@ const DashboardForMain = () => {
                         id: repoNodeId,
                         name: repoNodeName,
                         type: 'repo',
-                        URL: currentRepoUrl, // Сохраняем URL с большой буквы U
+                        URL: currentRepoUrl,
                         projectId: currentProjectId, // Используем projectId из состояния
                     },
                     draggable: true,
@@ -304,23 +312,33 @@ const DashboardForMain = () => {
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        if ((node.type === 'repoNode' || node.type === 'serviceNode') && currentProjectId) {
+        console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId);
+
+        // Проверка, что currentProjectId валиден ПЕРЕД отправкой запроса
+        if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+            console.warn('Cannot update node position: currentProjectId is not valid. Not sending update.');
+            return; // Прекращаем выполнение, если ID проекта невалиден
+        }
+
+        if (node.type === 'repoNode' || node.type === 'serviceNode') {
             try {
+                // Отладочный лог перед вызовом API
+                console.log(`Attempting to update position for node ${node.id} to {x: ${node.position.x}, y: ${node.position.y}} in project ${currentProjectId}`);
                 await updateNodePosition(node.id, node.position, currentProjectId);
-                console.log(`Updated position for node ${node.id}`);
+                console.log(`Successfully updated position for node ${node.id}`);
             } catch (error) {
                 console.error(`Failed to update position for node ${node.id}:`, error.message);
+                // Можно добавить тут UI-сообщение пользователю об ошибке
+                alert(`Failed to update position for node ${node.id}: ${error.message}`);
             }
         }
-    }, [currentProjectId]);
+    }, [currentProjectId]); // Зависимость верна, React будет пересоздавать эту функцию при изменении currentProjectId
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
         setIsSidebarOpen(true);
 
         if (node.type === 'repoNode' && structure) {
-            // Передаем весь объект structure, который уже содержит URL и другие данные
-            // ProjectId также передаем для отображения в сайдбаре
             setSidebarContent({ type: 'repo', ...structure, projectId: currentProjectId, URL: node.data.URL });
         } else if (node.type === 'serviceNode') {
             setSidebarContent({ type: 'serviceNode', ...node.data });
