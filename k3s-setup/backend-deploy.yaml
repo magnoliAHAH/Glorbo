@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: mixail.ermin33.fvds.ru:31339/glorbo-backend:latest
+          image: mixail.ermin33.fvds.ru:31339/glorbo-backend:IMAGE_TAG
           ports:
             - containerPort: 8080
           env:
