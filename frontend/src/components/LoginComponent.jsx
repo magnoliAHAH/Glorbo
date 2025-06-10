@@ -4,21 +4,29 @@ import styled from 'styled-components';
 const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [app_id, setApp_id] = useState(0);
+  const [app_id, setApp_id] = useState(''); // ← строка
   const [result, setResult] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setResult('');
     try {
+      const appIdNumber = parseInt(app_id, 10); // ← преобразование здесь
+
+      if (isNaN(appIdNumber)) {
+        setResult('❌ App ID должен быть числом');
+        return;
+      }
+
       const res = await fetch('https://mixail.ermin33.fvds.ru/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, app_id }),
+        body: JSON.stringify({ email, password, app_id: appIdNumber }),
       });
+
       if (res.ok) {
         const data = await res.json();
-        setResult(`✅ Успешный вход. ID пользователя: ${data.token}`);
+        setResult(`✅ Успешный вход. Token пользователя: ${data.token}`);
       } else {
         const err = await res.text();
         setResult(`❌ Ошибка входа: ${err}`);
@@ -55,7 +63,7 @@ const LoginForm = () => {
           <Input
             type="number"
             value={app_id}
-            onChange={e => setApp_id(parseInt(e.target.value, 10) || 0)}
+            onChange={e => setApp_id(e.target.value)} // ← просто строка
             required
           />
         </Label>

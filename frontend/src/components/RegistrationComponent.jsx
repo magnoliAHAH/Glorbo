@@ -21,7 +21,7 @@ const RegistrationComponent = () => {
 
       if (res.ok) {
         const data = await res.json();
-        setResult(`✅ Успешный вход. Токен: ${data.token}`);
+        setResult(`✅ Успешный вход. ID: ${data.ID}`);
       } else {
         const err = await res.text();
         setResult(`❌ Ошибка входа: ${err}`);
