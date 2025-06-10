@@ -10,10 +10,9 @@ import ReactFlow, {
     addEdge,
     Panel,
 } from 'reactflow';
-
 // Импортируем функции API и утилиты
 import { createService, updateNodePosition } from '../functions/api/api'; // getRepoTree не нужен напрямую, т.к. вы уже фечите структуру
-import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar } from '../functions/utils';
+import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Кастомные узлы React Flow с styled-components ---
 
