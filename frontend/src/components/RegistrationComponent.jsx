@@ -13,7 +13,7 @@ const RegistrationComponent = () => {
     try {
       const numericAppId = parseInt(app_id, 10); // преобразуем в число перед отправкой
 
-      const res = await fetch('https://mixail.ermin33.fvds.ru/api/login', {
+      const res = await fetch('https://mixail.ermin33.fvds.ru/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, app_id: numericAppId }),
