@@ -55,7 +55,7 @@ const RegistrationComponent = () => {
           <Input
             type="number"
             value={app_id}
-            onChange={e => setApp_id(e.target.value)}
+            onChange={e => setApp_id(parseInt(e.target.value, 10) || 0)}
             required
           />
         </Label>
