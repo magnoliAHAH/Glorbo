@@ -498,59 +498,105 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateNodePosition обновляет позицию узла (сервиса) в БД
 func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
+	// Установка CORS-заголовков
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Важно для preflight-запросов
 
-	requestsTotal.WithLabelValues("/api/update-node-position", r.Method).Inc()
+	// Если requestsTotal инициализирован, увеличиваем метрику
+	// if requestsTotal != nil {
+	// 	requestsTotal.WithLabelValues("/api/update-node-position", r.Method).Inc()
+	// }
+
+	// Обработка OPTIONS-запросов (preflight)
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Проверка авторизации
+	// --- Проверка авторизации (предполагается, что userIDKey определен и используется) ---
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // Может быть использован для проверки прав на изменение узла
+	// userID := raw.(string) // Если требуется ID пользователя для проверки прав
 
+	// --- Декодирование тела запроса ---
 	var req struct {
-		RepoName string   `json:"repoName"` // Имя репозитория (для контекста)
-		NodeID   string   `json:"nodeId"`   // ID узла, чья позиция обновляется
-		Position Position `json:"position"` // Новая позиция
+		NodeID    string   `json:"nodeId"`
+		Position  Position `json:"position"`
+		ProjectID int64    `json:"projectId"` // Ожидаем projectId, как отправляет фронтенд
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields() // Не разрешать неизвестные поля для строгой валидации
+
+	if err := decoder.Decode(&req); err != nil {
+		log.Printf("Error decoding request body: %v", err)
+		http.Error(w, "Invalid request body format or unknown fields provided", http.StatusBadRequest)
 		return
 	}
 
+	// --- Валидация полей запроса ---
 	if req.NodeID == "" {
 		http.Error(w, "Node ID is required", http.StatusBadRequest)
 		return
 	}
+	if req.ProjectID == 0 { // ProjectID должен быть > 0
+		http.Error(w, "Project ID is required and must be a positive integer", http.StatusBadRequest)
+		return
+	}
+	// Можно добавить валидацию для Position.X и Position.Y, если они имеют ограничения
 
-	// Обновляем позицию сервиса в БД по его ID
+	// --- Проверка прав пользователя на проект (пример, если у вас есть такая логика) ---
+	// Если у вас есть таблица users_projects, можно проверить:
+	// var exists bool
+	// err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users_projects WHERE user_id = $1 AND project_id = $2)", userID, req.ProjectID).Scan(&exists)
+	// if err != nil {
+	// 	log.Printf("Database error checking project access: %v", err)
+	// 	http.Error(w, "Internal server error during access check", http.StatusInternalServerError)
+	// 	return
+	// }
+	// if !exists {
+	// 	http.Error(w, "Access denied: Project not found or user does not have access", http.StatusForbidden)
+	// 	return
+	// }
+
+	// --- Обновление позиции в базе данных ---
+	// ВАЖНО: Добавляем project_id в условие WHERE для безопасности и целостности данных.
+	// Обновляем только сервисы, принадлежащие указанному ProjectID.
 	result, err := db.Exec(`
-		UPDATE services
-		SET position_x = $1, position_y = $2
-		WHERE id = $3
-	`, req.Position.X, req.Position.Y, req.NodeID)
+        UPDATE services
+        SET position_x = $1, position_y = $2
+        WHERE id = $3 AND project_id = $4
+    `, req.Position.X, req.Position.Y, req.NodeID, req.ProjectID)
 
 	if err != nil {
-		log.Printf("Failed to update position for service %s: %v", req.NodeID, err)
+		log.Printf("Failed to update position for service %s in project %d: %v", req.NodeID, req.ProjectID, err)
 		http.Error(w, fmt.Sprintf("Failed to update node position: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		http.Error(w, "Service not found with the provided ID or no changes made", http.StatusNotFound)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error getting rows affected after update: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 
+	if rowsAffected == 0 {
+		// Если ни одна строка не затронута, это может означать:
+		// 1. Сервис с таким ID не существует.
+		// 2. Сервис с таким ID существует, но не принадлежит данному ProjectID.
+		// 3. Позиции уже были такими же, и база данных не произвела изменений.
+		log.Printf("No service found with ID %s for project %d, or no changes made.", req.NodeID, req.ProjectID)
+		http.Error(w, "Service not found for this project, or position already up-to-date", http.StatusNotFound)
+		return
+	}
+
+	// --- Успешный ответ ---
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Node position updated successfully"})
 }
