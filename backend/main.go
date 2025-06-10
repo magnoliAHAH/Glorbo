@@ -186,9 +186,9 @@ func createTables() error {
 		position_y FLOAT DEFAULT 0.0,
 		created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 		CONSTRAINT fk_project
-            FOREIGN KEY(project_id) 
-            REFERENCES projects(id)
-            ON DELETE CASCADE
+			FOREIGN KEY(project_id)
+			REFERENCES projects(id)
+			ON DELETE CASCADE
 	);`
 
 	// Добавим project_id в таблицу apps, если его нет
@@ -444,10 +444,10 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	userID := raw.(string)
+	// userID := raw.(string) // userID не используется напрямую здесь, но может быть для доп. проверок
 
 	var req struct {
-		RepoName    string    `json:"repoName"`    // Имя репозитория (для привязки к проекту)
+		ProjectID   int64     `json:"projectId"`   // Теперь ожидаем project_id напрямую
 		ServiceType string    `json:"serviceType"` // Тип сервиса (backend, redis, etc.)
 		Position    *Position `json:"position"`    // Желаемая позиция на канвасе
 	}
@@ -456,26 +456,17 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.RepoName == "" || req.ServiceType == "" {
-		http.Error(w, "repoName and serviceType are required", http.StatusBadRequest)
+	// Проверяем наличие необходимых полей
+	if req.ProjectID == 0 || req.ServiceType == "" {
+		http.Error(w, "projectId and serviceType are required", http.StatusBadRequest)
 		return
 	}
 	if req.Position == nil {
 		req.Position = &Position{X: 0, Y: 0} // Устанавливаем дефолтную позицию, если не указана
 	}
 
-	// Находим project_id по имени репозитория и userID
-	var projectID int64
-	err := db.QueryRow("SELECT id FROM projects WHERE name = $1 AND user_id = $2", req.RepoName, userID).Scan(&projectID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found for this user and repository name", http.StatusNotFound) // ВОТ ЗДЕСЬ ВОЗНИКАЕТ 404
-			return
-		}
-		log.Printf("Database error fetching project ID for repo %s and user %s: %v", req.RepoName, userID, err)
-		http.Error(w, fmt.Sprintf("Database error: %v", err), http.StatusInternalServerError)
-		return
-	}
+	// Используем projectID напрямую из запроса
+	projectID := req.ProjectID
 
 	// Генерируем уникальный ID для нового сервиса
 	serviceID := generateUUID()
@@ -486,7 +477,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	servicePath := strings.ToLower(req.ServiceType)
 
 	// Вставляем новый сервис в БД
-	_, err = db.Exec(`
+	_, err := db.Exec(`
 		INSERT INTO services (id, project_id, name, type, status, volume, version, path, position_x, position_y)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`, serviceID, projectID, serviceName, req.ServiceType, "pending", "", "", servicePath, req.Position.X, req.Position.Y)
@@ -501,6 +492,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message":   "Service created successfully",
 		"serviceId": serviceID,
+		"name":      serviceName, // Отдаем имя обратно, чтобы фронтенд мог его использовать
 	})
 }
 
@@ -586,7 +578,285 @@ func getServicesByProjectID(projectID int64) ([]Service, error) {
 	return services, nil
 }
 
-// --- Остальные функции (без существенных изменений, только CORS и методы) ---
+// generateSecret генерирует случайную строку для секрета
+func generateSecret() string {
+	b := make([]byte, 32) // 256-битный секрет
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("Failed to generate secret: %v", err)
+		return ""
+	}
+	return hex.EncodeToString(b)
+}
+
+// createAuthServiceDB создает запись о новом сервисе аутентификации (приложении) в БД
+// Обратите внимание: apps.project_id может быть NULL, если не установлен.
+// В идеале, он должен быть NOT NULL и заполняться при создании проекта,
+// или привязываться к проекту сразу при создании auth-сервиса.
+func createAuthServiceDB(appName, secret, projectIDStr string) error {
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid project_id: %w", err)
+	}
+
+	// Проверяем, существует ли проект с таким ID
+	var exists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)", projectID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("database error checking project existence: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("project with ID %d does not exist", projectID)
+	}
+
+	// Вставляем в таблицу apps.
+	// app_id будет сгенерирован автоматически, если это SERIAL PRIMARY KEY.
+	// name - это имя приложения, которое пользователь ввел.
+	// secret - это сгенерированный секрет.
+	// project_id - это projectID, к которому привязан auth-сервис.
+	query := `INSERT INTO apps (name, secret, project_id) VALUES ($1, $2, $3)`
+	_, err = db.Exec(query, appName, secret, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to insert auth service into apps table: %w", err)
+	}
+	log.Printf("Auth service '%s' created for project ID %d", appName, projectID)
+	return nil
+}
+
+// handleCreateAuthService создает новый сервис авторизации (приложение) для проекта
+func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+	requestsTotal.WithLabelValues("/api/projects/{project_id}/auth-services", r.Method).Inc()
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// userID := raw.(string) // В текущей реализации не используется, но может понадобиться для проверки прав
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid input", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, "App name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем project_id из URL-пути
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok || projectIDStr == "" {
+		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
+		return
+	}
+
+	secret := generateSecret()
+
+	// Создаём запись в базе данных
+	err := createAuthServiceDB(req.Name, secret, projectIDStr)
+	if err != nil {
+		log.Printf("Failed to create auth service in DB: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to create auth service: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Получаем ID только что созданного приложения (auth-сервиса)
+	var newAppID int32
+	// Это предполагает, что 'apps.id' является SERIAL PRIMARY KEY и last_insert_id() доступен.
+	// Для PostgreSQL, можно использовать RETURNING id
+	err = db.QueryRow("SELECT id FROM apps WHERE name = $1 AND secret = $2 AND project_id = $3 ORDER BY id DESC LIMIT 1", req.Name, secret, projectIDStr).Scan(&newAppID)
+	if err != nil {
+		log.Printf("Failed to retrieve new app ID: %v", err)
+		// Все равно отправляем ответ, но без ID, если не удалось получить
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "created",
+			"secret":  secret,
+			"message": "Auth service created, but ID could not be retrieved.",
+		})
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "created",
+		"secret":        secret,
+		"authServiceId": newAppID, // Возвращаем ID созданного auth-сервиса
+	})
+}
+
+// handleProjects обрабатывает запросы на создание и получение проектов пользователя
+func handleProjects(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+	requestsTotal.WithLabelValues("/api/projects", r.Method).Inc()
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID := raw.(string)
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := db.Query("SELECT id, name, url FROM projects WHERE user_id = $1", userID)
+		if err != nil {
+			log.Printf("Error querying projects for user %s: %v", userID, err)
+			http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		var projects []Project
+		for rows.Next() {
+			var p Project
+			var url sql.NullString // Используем sql.NullString для nullable URL
+			if err := rows.Scan(&p.ID, &p.Name, &url); err != nil {
+				log.Printf("Error scanning project row: %v", err)
+				continue
+			}
+			if url.Valid {
+				p.URL = url.String
+			}
+			p.UserID = userID // Устанавливаем user_id, так как он не выбирается напрямую
+			projects = append(projects, p)
+		}
+		json.NewEncoder(w).Encode(projects)
+
+	case http.MethodPost:
+		var req struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request body", http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" || req.URL == "" {
+			http.Error(w, "Project name and URL are required", http.StatusBadRequest)
+			return
+		}
+
+		var projectID int64
+		err := db.QueryRow(
+			"INSERT INTO projects (user_id, name, url) VALUES ($1, $2, $3) RETURNING id",
+			userID, req.Name, req.URL,
+		).Scan(&projectID)
+		if err != nil {
+			log.Printf("Failed to insert new project: %v", err)
+			http.Error(w, "Failed to create project", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{
+			"message":   "Project created successfully",
+			"projectID": projectID,
+		})
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// getUsersHandler retrieves users associated with a specific app within a project.
+// This function needs further development based on how 'apps' and 'users' are truly linked
+// and how 'project_id' relates to the app/user context.
+func getUsersHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+
+	requestsTotal.WithLabelValues("/api/projects/{project_id}/users", r.Method).Inc()
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	// authenticatedUserID := raw.(string) // The ID of the user making the request
+
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok || projectIDStr == "" {
+		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
+		return
+	}
+
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid project_id", http.StatusBadRequest)
+		return
+	}
+
+	// --- Logic to fetch users for the given project_id ---
+	// This assumes:
+	// 1. There's a relationship between 'projects' and 'apps' (auth services)
+	// 2. There's a relationship between 'apps' and 'users'
+	// This is a placeholder; you'll need to adjust the SQL query based on your actual schema
+	// and how users are linked to specific authentication services (apps) within a project.
+
+	// Example: Fetch users associated with apps belonging to this project
+	// This assumes:
+	// - 'users' table has a 'app_id' column
+	// - 'apps' table has a 'project_id' column
+	rows, err := db.Query(`
+        SELECT u.id, u.email, u.app_id
+        FROM users u
+        JOIN apps a ON u.app_id = a.id
+        WHERE a.project_id = $1
+    `, projectID)
+	if err != nil {
+		log.Printf("Failed to fetch users for project %d: %v", projectID, err)
+		http.Error(w, "Failed to retrieve users", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var user User
+		if err := rows.Scan(&user.ID, &user.Email, &user.AppID); err != nil {
+			log.Printf("Error scanning user row: %v", err)
+			continue
+		}
+		users = append(users, user)
+	}
+
+	json.NewEncoder(w).Encode(users)
+}
 
 // WithAuth - Middleware для проверки аутентификации пользователя по JWT токену из куки
 func WithAuth(next http.Handler) http.Handler {
@@ -734,255 +1004,4 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
-}
-
-// handleCreateAuthService создает новый сервис авторизации (приложение) для проекта
-func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-
-	requestsTotal.WithLabelValues("/api/authService", r.Method).Inc()
-
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	raw := r.Context().Value(userIDKey)
-	if raw == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	// userID := raw.(string) // В текущей реализации не используется, но может понадобиться для проверки прав
-
-	var req struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid input", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "App name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Получаем project_id из URL-пути
-	vars := mux.Vars(r)
-	projectIDStr, ok := vars["project_id"]
-	if !ok || projectIDStr == "" {
-		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
-		return
-	}
-
-	secret := generateSecret()
-
-	// Создаём запись в базе данных
-	if err := createAuthServiceDB(req.Name, secret, projectIDStr); err != nil { // Переименовал, чтобы не конфликтовать
-		log.Printf("Failed to create auth service in DB: %v", err)
-		http.Error(w, "Failed to create auth service", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status": "created",
-		"secret": secret,
-	})
-}
-
-// handleProjects обрабатывает запросы на создание и получение проектов пользователя
-func handleProjects(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-
-	requestsTotal.WithLabelValues("/api/projects", r.Method).Inc()
-
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	raw := r.Context().Value(userIDKey)
-	if raw == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	userID := raw.(string)
-
-	switch r.Method {
-	case http.MethodGet:
-		projects, err := getProjectsByUser(userID)
-		if err != nil {
-			log.Printf("Failed to fetch projects for user %s: %v", userID, err)
-			http.Error(w, "Failed to fetch projects", http.StatusInternalServerError)
-			return
-		}
-		if len(projects) == 0 {
-			// Возвращаем пустой массив или сообщение, но не ошибку 404, если проектов нет
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode([]Project{}) // Возвращаем пустой JSON-массив
-			return
-		}
-		json.NewEncoder(w).Encode(projects)
-
-	case http.MethodPost:
-		var req struct {
-			Name string `json:"name"`
-			URL  string `json:"url"` // Теперь ожидаем URL репозитория
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, "Invalid input", http.StatusBadRequest)
-			return
-		}
-		if req.Name == "" {
-			http.Error(w, "Project name is required", http.StatusBadRequest)
-			return
-		}
-		if req.URL == "" {
-			http.Error(w, "Project URL is required", http.StatusBadRequest)
-			return
-		}
-
-		// Проверяем, существует ли уже проект с таким URL для этого пользователя
-		var count int
-		err := db.QueryRow("SELECT COUNT(*) FROM projects WHERE user_id = $1 AND url = $2", userID, req.URL).Scan(&count)
-		if err != nil {
-			log.Printf("Database error checking existing project for user %s, URL %s: %v", userID, req.URL, err)
-			http.Error(w, "Database error checking existing project", http.StatusInternalServerError)
-			return
-		}
-		if count > 0 {
-			http.Error(w, "Project with this URL already exists for this user", http.StatusConflict)
-			return
-		}
-
-		if err := createProject(userID, req.Name, req.URL); err != nil {
-			log.Printf("Failed to create project for user %s: %v", userID, err)
-			http.Error(w, "Failed to create project", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"status": "created", "message": "Project created successfully"})
-
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-// createProject создает новую запись о проекте в БД
-func createProject(userID, name, url string) error {
-	_, err := db.Exec("INSERT INTO projects (user_id, name, url) VALUES ($1, $2, $3)", userID, name, url)
-	return err
-}
-
-// getProjectsByUser извлекает список проектов для данного пользователя
-func getProjectsByUser(userID string) ([]Project, error) {
-	rows, err := db.Query("SELECT id, user_id, name, url FROM projects WHERE user_id = $1", userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var projects []Project
-	for rows.Next() {
-		var p Project
-		// Изменил Scan для соответствия структуре Project (добавил URL)
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Name, &p.URL); err != nil {
-			return nil, err
-		}
-		projects = append(projects, p)
-	}
-	return projects, nil
-}
-
-// getUsersHandler обрабатывает запрос на получение списка пользователей для конкретного проекта
-func getUsersHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-
-	requestsTotal.WithLabelValues("/api/projects/{project_id}/users", r.Method).Inc()
-
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	vars := mux.Vars(r)
-	projectIDStr, ok := vars["project_id"]
-	if !ok || projectIDStr == "" {
-		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
-		return
-	}
-
-	projectID, err := strconv.Atoi(projectIDStr)
-	if err != nil {
-		http.Error(w, "Invalid project_id", http.StatusBadRequest)
-		return
-	}
-
-	users, err := getUsersByProjectID(int32(projectID))
-	if err != nil {
-		log.Printf("Error fetching users for project %d: %v", projectID, err)
-		http.Error(w, fmt.Sprintf("Error fetching users: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if err := json.NewEncoder(w).Encode(users); err != nil {
-		http.Error(w, fmt.Sprintf("Error encoding response: %v", err), http.StatusInternalServerError)
-		return
-	}
-}
-
-// getUsersByProjectID извлекает список пользователей, связанных с проектом через app_id
-func getUsersByProjectID(projectID int32) ([]User, error) {
-	rows, err := db.Query(`
-		SELECT u.id, u.email, u.app_id
-		FROM users u
-		JOIN apps a ON u.app_id = a.id
-		WHERE a.project_id = $1
-	`, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var users []User
-	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.AppID); err != nil {
-			return nil, err
-		}
-		users = append(users, u)
-	}
-	return users, nil
-}
-
-// createAuthServiceDB создает новую запись приложения (auth-сервиса) в БД
-func createAuthServiceDB(name, secret, projectID string) error {
-	projectIDInt, err := strconv.ParseInt(projectID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid project ID: %w", err)
-	}
-	_, err = db.Exec("INSERT INTO apps (name, secret, project_id) VALUES ($1, $2, $3)", name, secret, projectIDInt)
-	return err
-}
-
-// generateSecret генерирует криптографически стойкий случайный секрет
-func generateSecret() string {
-	b := make([]byte, 32) // 32 байта = 256 бит
-	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("Failed to generate secret: %v", err)
-	}
-	return hex.EncodeToString(b)
 }
