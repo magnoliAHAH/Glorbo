@@ -23,4 +23,18 @@ CREATE TABLE IF NOT EXISTS users (
     UNIQUE (app_id, email)
 );
 
+CREATE TABLE IF NOT EXISTS services (
+    id TEXT PRIMARY KEY, -- ID сервиса, соответствует node.id из фронтенда
+    project_id BIGINT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL, -- e.g., 'backend', 'frontend', 'authentication'
+    status TEXT DEFAULT 'unknown',
+    volume TEXT,
+    version TEXT,
+    path TEXT NOT NULL, -- Относительный путь в репозитории
+    position_x FLOAT DEFAULT 0.0,
+    position_y FLOAT DEFAULT 0.0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_email ON users (email);

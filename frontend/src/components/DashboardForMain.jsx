@@ -312,27 +312,30 @@ const DashboardForMain = () => {
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId);
-
-        // Проверка, что currentProjectId валиден ПЕРЕД отправкой запроса
+        console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type); // ДОБАВЛЕНО ЛОГИРОВАНИЕ ТИПА
+    
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
             console.warn('Cannot update node position: currentProjectId is not valid. Not sending update.');
-            return; // Прекращаем выполнение, если ID проекта невалиден
+            return;
         }
-
-        if (node.type === 'repoNode' || node.type === 'serviceNode') {
+    
+        // !!! ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем только для SERVICE NODES !!!
+        if (node.type === 'serviceNode') { // <--- ИЗМЕНЕНО С "repoNode || serviceNode"
             try {
-                // Отладочный лог перед вызовом API
-                console.log(`Attempting to update position for node ${node.id} to {x: ${node.position.x}, y: ${node.position.y}} in project ${currentProjectId}`);
+                console.log(`Attempting to update position for service node ${node.id} to {x: ${node.position.x}, y: ${node.position.y}} in project ${currentProjectId}`);
                 await updateNodePosition(node.id, node.position, currentProjectId);
-                console.log(`Successfully updated position for node ${node.id}`);
+                console.log(`Successfully updated position for service node ${node.id}`);
             } catch (error) {
-                console.error(`Failed to update position for node ${node.id}:`, error.message);
-                // Можно добавить тут UI-сообщение пользователю об ошибке
-                alert(`Failed to update position for node ${node.id}: ${error.message}`);
+                console.error(`Failed to update position for service node ${node.id}:`, error.message);
+                alert(`Failed to update position for service node ${node.id}: ${error.message}`);
             }
+        } else {
+            console.log(`Node type ${node.type} is not a service node. Position not saved.`);
+            // Если вы хотите сохранять позиции repoNode,
+            // вам потребуется отдельная таблица/поле в таблице 'projects'
+            // и отдельный API-эндпоинт для этого.
         }
-    }, [currentProjectId]); // Зависимость верна, React будет пересоздавать эту функцию при изменении currentProjectId
+    }, [currentProjectId]);
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
