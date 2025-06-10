@@ -4,24 +4,27 @@ import styled from 'styled-components';
 const RegistrationComponent = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [app_id, setApp_id] = useState(0);
+  const [app_id, setApp_id] = useState('');
   const [result, setResult] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setResult('');
     try {
-      const res = await fetch('https://mixail.ermin33.fvds.ru/api/register', {
+      const numericAppId = parseInt(app_id, 10); // преобразуем в число перед отправкой
+
+      const res = await fetch('https://mixail.ermin33.fvds.ru/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, app_id }),
+        body: JSON.stringify({ email, password, app_id: numericAppId }),
       });
+
       if (res.ok) {
         const data = await res.json();
-        setResult(`✅ Успешная регистрация. ID пользователя: ${data.user_id}`);
+        setResult(`✅ Успешный вход. Токен: ${data.token}`);
       } else {
         const err = await res.text();
-        setResult(`❌ Ошибка регистрации: ${err}`);
+        setResult(`❌ Ошибка входа: ${err}`);
       }
     } catch (err) {
       setResult(`❌ Ошибка запроса: ${err.message}`);
@@ -55,7 +58,7 @@ const RegistrationComponent = () => {
           <Input
             type="number"
             value={app_id}
-            onChange={e => setApp_id(parseInt(e.target.value, 10) || 0)}
+            onChange={e => setApp_id(e.target.value)}
             required
           />
         </Label>
