@@ -4,7 +4,7 @@ import styled from 'styled-components';
 const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [app_id, setApp_id] = useState('');
+  const [app_id, setApp_id] = useState(0);
   const [result, setResult] = useState('');
 
   const handleSubmit = async (e) => {
