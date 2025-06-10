@@ -18,10 +18,13 @@ const Sidebar = () => {
         <Logo>🚀 DevTools</Logo>
 
         <NavLinks>
-
           <NavItem to="/dashboard">
             <FiHome />
             Dashboard
+          </NavItem>
+          <NavItem to="/repo-preview">
+            <FiHome />
+            Repo Dashboard
           </NavItem>
           <NavItem to="/debug">
             <FiTool />

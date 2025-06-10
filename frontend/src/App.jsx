@@ -12,6 +12,8 @@ import Deploy from './pages/Deploy'
 import Analitics from './pages/Analitics'
 import Assistant from './pages/Assistant'
 import Cicd from './pages/Cicd'
+import MainDashboard from './pages/DashboardRepo'
+import DashboardRepoPage from './pages/DashboardRepo'
 
 
 
@@ -26,6 +28,7 @@ function App() {
 
           <Route element={<MainLayout/>}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/repo-preview" element={<DashboardRepoPage />} />
             <Route path="/authentication" element={<Authentication />} />
             <Route path="/debug" element={<Debug/>} />
             <Route path="/deploy" element={<Deploy/>} />
