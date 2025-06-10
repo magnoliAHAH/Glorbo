@@ -3,15 +3,15 @@
 
 /**
  * Рекурсивно преобразует древовидную структуру FileNode в узлы и рёбра React Flow.
+ * Используется, в основном, для инициализации узлов на холсте (если это корневой репозиторий)
+ * и для отображения всей структуры в сайдбаре.
  * Важно: эта функция создает узлы для ВСЕЙ структуры.
- * Если на холсте должен быть только узел репозитория,
- * то вы будете использовать ее только для sidebar, а для ReactFlow
- * создадите только корневой repoNode.
  */
 export function convertFileNodeToReactFlowElements(fileNode, parentId = null, depth = 0, siblingIndex = 0) {
     const nodes = [];
     const edges = [];
 
+    // Базовые координаты для упорядоченного размещения (если нет сохраненных позиций)
     const initialX = depth * 250;
     const initialY = siblingIndex * 100 + depth * 50;
 
@@ -19,10 +19,11 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
     let nodeType = 'default';
 
     if (fileNode.type === 'service') {
+        // Если у сервиса есть сохраненные позиции, используем их
         if (fileNode.position && fileNode.position.x != null && fileNode.position.y != null) {
             position = { x: fileNode.position.x, y: fileNode.position.y };
         }
-        nodeType = 'serviceNode'; // Кастомный тип узла
+        nodeType = 'serviceNode'; // Кастомный тип узла для сервисов
     } else if (fileNode.type === 'repo') {
         nodeType = 'repoNode';
         position = { x: 50, y: 50 }; // Фиксированная позиция для узла репозитория
@@ -39,9 +40,14 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
         data: {
             name: fileNode.name,
             type: fileNode.type,
-            ...fileNode, // Копируем все свойства FileNode в data
-            projectId: fileNode.projectId?.Int64,
+            ...fileNode, // Копируем все остальные свойства FileNode в data
+            // Обработка projectId: если приходит как { Int64: ..., Valid: ... } из Go,
+            // берем Int64. Если просто число, то берем его напрямую.
+            // Если projectId уже число, то fileNode.projectId?.Int64 будет undefined,
+            // и тогда возьмется fileNode.projectId.
+            projectId: fileNode.projectId?.Int64 !== undefined ? fileNode.projectId.Int64 : fileNode.projectId,
         },
+        // Узлы репозитория и сервисов должны быть перетаскиваемыми
         draggable: fileNode.type === 'service' || fileNode.type === 'repo',
     });
 
@@ -51,10 +57,11 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
             source: parentId,
             target: fileNode.id,
             type: 'smoothstep',
-            animated: fileNode.type === 'service',
+            animated: fileNode.type === 'service', // Анимируем связи для сервисов
         });
     }
 
+    // Рекурсивно обрабатываем дочерние узлы
     fileNode.children?.forEach((child, idx) => {
         const { nodes: childNodes, edges: childEdges } = convertFileNodeToReactFlowElements(child, fileNode.id, depth + 1, idx);
         nodes.push(...childNodes);
@@ -64,25 +71,40 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
     return { nodes, edges };
 }
 
-export function createReactFlowServiceNode(id, serviceType, position) {
+/**
+ * Создает новый узел React Flow для сервиса.
+ * @param {string} id - Уникальный ID узла.
+ * @param {string} serviceType - Тип сервиса (e.g., 'backend', 'authentication').
+ * @param {object} position - Объект {x, y} для позиции узла.
+ * @param {string} name - Имя сервиса.
+ * @param {number} projectId - ID проекта, к которому принадлежит сервис.
+ * @returns {object} Объект узла React Flow.
+ */
+export function createReactFlowServiceNode(id, serviceType, position, name, projectId) {
     return {
         id: id,
         position: position,
         type: 'serviceNode',
         data: {
             id: id, // Добавляем ID в data для удобства
-            name: `${serviceType}-service`,
-            type: 'service',
-            serviceType: serviceType,
-            status: 'pending',
+            name: name || `${serviceType}-service`, // Используем переданное имя, если есть
+            type: 'service', // Общий тип
+            serviceType: serviceType, // Специфический тип сервиса
+            status: 'pending', // Начальный статус
             volume: '',
             version: '',
-            // Добавьте другие поля, которые ожидаются бэкендом
+            projectId: projectId, // Включаем ProjectID в данные узла
         },
-        draggable: true,
+        draggable: true, // Новый сервис должен быть перетаскиваемым
     };
 }
 
+/**
+ * Рекурсивная функция для рендеринга файловой структуры для сайдбара.
+ * @param {object} node - Текущий узел (FileNode) для рендеринга.
+ * @param {number} depth - Текущая глубина в древовидной структуре.
+ * @returns {JSX.Element | null} JSX-элемент для отображения узла и его дочерних элементов.
+ */
 export function renderFileNodeForSidebar(node, depth = 0) {
     if (!node) return null; // Защита от пустого узла
 
@@ -93,14 +115,15 @@ export function renderFileNodeForSidebar(node, depth = 0) {
         padding: '5px',
         borderLeft: depth > 0 ? '1px solid #ccc' : 'none',
         marginBottom: '2px',
-        backgroundColor: 'rgba(255,255,255,0.05)',
+        backgroundColor: 'rgba(255,255,255,0.05)', // Легкий фон для узлов
         borderRadius: '3px'
     };
 
-    let icon = '📄';
-    let typeText = node.type;
-    let details = [];
+    let icon = '📄'; // Иконка по умолчанию для файла
+    let typeText = node.type; // Текст типа
+    let details = []; // Дополнительные детали для отображения
 
+    // Определяем иконку, тип и детали в зависимости от типа узла
     if (node.type === 'folder') {
         icon = '📁';
         typeText = 'Folder';
@@ -112,12 +135,15 @@ export function renderFileNodeForSidebar(node, depth = 0) {
         if (node.position) details.push(<div key="s-pos">**Position:** ({node.position.x?.toFixed(0)}, {node.position.y?.toFixed(0)})</div>);
         if (node.version) details.push(<div key="s-version">**Version:** {node.version}</div>);
         if (node.volume) details.push(<div key="s-volume">**Volume:** {node.volume}</div>);
+        // Если сервис содержит projectId в своих данных, отобразим его
+        if (node.projectId) details.push(<div key="s-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
 
     } else if (node.type === 'repo') {
         icon = '📦';
         typeText = 'Repository';
         details.push(<div key="r-url">**URL:** {node.URL || 'N/A'}</div>);
-        if (node.projectId) details.push(<div key="r-proj">**Project ID:** {node.projectId.Int64 || 'N/A'}</div>);
+        // Здесь мы уже не ожидаем .Int64, так как projectId может быть просто числом
+        if (node.projectId) details.push(<div key="r-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
     } else if (node.type === 'file') {
         typeText = 'File';
         if (node.size) details.push(<div key="f-size">**Size:** {node.size}</div>);
@@ -133,6 +159,7 @@ export function renderFileNodeForSidebar(node, depth = 0) {
                     {details}
                 </div>
             )}
+            {/* Рекурсивно рендерим дочерние элементы */}
             {node.children && node.children.length > 0 && (
                 <div style={{ paddingLeft: '10px' }}>
                     {node.children.map(child => renderFileNodeForSidebar(child, depth + 1))}
@@ -144,6 +171,9 @@ export function renderFileNodeForSidebar(node, depth = 0) {
 
 /**
  * Вспомогательная функция для плоского отображения информации о сервисе (для сайдбара).
+ * Используется, когда выбирается ServiceNode.
+ * @param {object} serviceData - Данные сервиса для отображения.
+ * @returns {JSX.Element} JSX-элемент с деталями сервиса.
  */
 export function renderServiceInfoForSidebar(serviceData) {
     if (!serviceData) return <p>No service selected.</p>;
@@ -160,6 +190,7 @@ export function renderServiceInfoForSidebar(serviceData) {
             )}
             {serviceData.version && <p><strong>Version:</strong> {serviceData.version}</p>}
             {serviceData.volume && <p><strong>Volume:</strong> {serviceData.volume}</p>}
+            {serviceData.projectId && <p><strong>Project ID:</strong> {serviceData.projectId}</p>} {/* Отображаем projectId */}
             {/* Добавьте больше полей по необходимости */}
         </div>
     );
