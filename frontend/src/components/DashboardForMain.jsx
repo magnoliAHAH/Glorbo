@@ -10,7 +10,7 @@ import ReactFlow, {
     addEdge,
     Panel,
 } from 'reactflow';
-import 'reactflow/dist/style.css'; 
+import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
 import { createService, updateNodePosition, getRepoTree, createAuthService } from '../functions/api/api';
@@ -72,7 +72,7 @@ const ServiceNodeContainer = styled(StyledNode)`
             case 'database': return '#bbdefb';
             case 'redis': return '#ffccbc';
             case 'auth':
-            case 'authentication': return '#e1bee7'; 
+            case 'authentication': return '#e1bee7';
             case 'nginx': return '#f5f5dc';
             case 'message-queue': return '#ffcdd2';
             default: return '#f5f5f5';
@@ -112,7 +112,7 @@ const nodeTypes = {
     serviceNode: ServiceNode,
 };
 
-// --- Sidebar Components --- (без изменений)
+// --- Sidebar Components ---
 const SidebarWrapper = styled.div`
     width: ${props => (props.isOpen ? '350px' : '0')};
     background-color: #fff;
@@ -122,6 +122,11 @@ const SidebarWrapper = styled.div`
     display: flex;
     flex-direction: column;
     z-index: 999;
+    /* !!! ИЗМЕНЕНИЕ: Позиционирование сайдбара */
+    position: absolute; /* Делаем его абсолютно позиционированным */
+    right: 0;           /* Прикрепляем к правой стороне */
+    top: 0;             /* Прикрепляем к верху */
+    bottom: 0;          /* Растягиваем на всю высоту */
 `;
 
 const SidebarHeader = styled.div`
@@ -182,9 +187,9 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
             <SidebarContent>
                 {content ? (
                     content.type === 'repo' ? (
-                        <>
-                            {renderFileNodeForSidebar(content)}
-                        </>
+                        // !!! ИЗМЕНЕНИЕ: Убедимся, что renderFileNodeForSidebar правильно обрабатывает URL
+                        // content уже содержит URL, переданный из DashboardForMain.jsx
+                        renderFileNodeForSidebar(content)
                     ) : (
                         renderServiceInfoForSidebar(content)
                     )
@@ -199,7 +204,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
 
 // --- Context Menu Component --- (без изменений)
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
-    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'authentication', 'nginx', 'message-queue']; 
+    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'authentication', 'nginx', 'message-queue'];
 
     return (
         <ContextMenuWrapper style={{ left: x, top: y }} onMouseLeave={onClose}>
@@ -220,7 +225,6 @@ const DashboardForMain = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Добавляем состояние для projectId
     const [currentProjectId, setCurrentProjectId] = useState(null);
 
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -236,23 +240,26 @@ const DashboardForMain = () => {
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
 
-    // Изменение: useEffect для чтения projectId из localStorage один раз при монтировании
+    // !!! ИЗМЕНЕНИЕ 1: useEffect для чтения projectId из localStorage
+    // Убедимся, что projectId установлен перед загрузкой repoTree
     useEffect(() => {
         const storedProjectId = localStorage.getItem('projectId');
         if (storedProjectId) {
-            // Преобразуем в число, так как в localStorage хранится строка
             setCurrentProjectId(Number(storedProjectId));
         } else {
-            console.warn('Project ID not found in localStorage!');
-            // Возможно, стоит перенаправить пользователя или показать ошибку
+            console.warn('Project ID not found in localStorage! Redirecting to projects.');
+            navigate('/projects');
         }
-    }, []); // Пустой массив зависимостей означает, что эффект запустится один раз
+    }, [navigate]);
 
-
-    // Загрузка структуры репозитория
+    // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
     useEffect(() => {
         if (!currentRepoUrl) {
             navigate('/projects');
+            return;
+        }
+        // Ждем, пока currentProjectId будет установлен
+        if (currentProjectId === null) {
             return;
         }
 
@@ -264,7 +271,6 @@ const DashboardForMain = () => {
                 console.log('Fetched structure:', fetchedStructure);
                 setStructure(fetchedStructure);
 
-                // Теперь projectId берем из состояния currentProjectId, а не из fetchedStructure
                 const repoNodeId = fetchedStructure.id;
                 const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
 
@@ -276,7 +282,7 @@ const DashboardForMain = () => {
                         id: repoNodeId,
                         name: repoNodeName,
                         type: 'repo',
-                        URL: currentRepoUrl,
+                        URL: currentRepoUrl, // Сохраняем URL с большой буквы U
                         projectId: currentProjectId, // Используем projectId из состояния
                     },
                     draggable: true,
@@ -294,34 +300,35 @@ const DashboardForMain = () => {
                 setNodes([]);
             })
             .finally(() => setLoading(false));
-    }, [currentRepoUrl, navigate, currentProjectId]); // Добавляем currentProjectId в зависимости
+    }, [currentRepoUrl, navigate, currentProjectId]); // Добавили currentProjectId в зависимости
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
         if ((node.type === 'repoNode' || node.type === 'serviceNode') && currentProjectId) {
             try {
-                // Передаем currentProjectId в updateNodePosition
-                await updateNodePosition(node.id, node.position, currentProjectId); 
+                await updateNodePosition(node.id, node.position, currentProjectId);
                 console.log(`Updated position for node ${node.id}`);
             } catch (error) {
                 console.error(`Failed to update position for node ${node.id}:`, error.message);
             }
         }
-    }, [currentProjectId]); // Зависимость от currentProjectId
+    }, [currentProjectId]);
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
         setIsSidebarOpen(true);
 
         if (node.type === 'repoNode' && structure) {
-            setSidebarContent({ type: 'repo', ...structure, projectId: currentProjectId }); // Добавляем projectId для отображения
+            // Передаем весь объект structure, который уже содержит URL и другие данные
+            // ProjectId также передаем для отображения в сайдбаре
+            setSidebarContent({ type: 'repo', ...structure, projectId: currentProjectId, URL: node.data.URL });
         } else if (node.type === 'serviceNode') {
             setSidebarContent({ type: 'serviceNode', ...node.data });
         } else {
             setSidebarContent(null);
             console.log('Clicked non-special node:', node);
         }
-    }, [structure, currentProjectId]); // Добавляем currentProjectId в зависимости
+    }, [structure, currentProjectId]);
 
     // Обработчик правого клика по фону холста (ПКМ)
     const onPaneContextMenu = useCallback((event) => {
@@ -350,7 +357,6 @@ const DashboardForMain = () => {
                     alert('Authentication service name cannot be empty.');
                     return;
                 }
-                // Передаем currentProjectId
                 const result = await createAuthService(currentProjectId, appName);
                 alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
                 console.log('Created Auth Service:', result);
@@ -360,12 +366,11 @@ const DashboardForMain = () => {
                     'authentication',
                     position,
                     appName,
-                    currentProjectId // Передаем projectId в данные узла React Flow
+                    currentProjectId
                 );
                 setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
 
             } else {
-                // Передаем currentProjectId
                 const result = await createService(currentProjectId, serviceType, position);
                 alert(`Service created: ${result.serviceId}`);
                 console.log('Created Service:', result);
@@ -374,8 +379,8 @@ const DashboardForMain = () => {
                     result.serviceId,
                     serviceType,
                     position,
-                    result.name || `${serviceType}-service`, // Используем имя из результата или дефолтное
-                    currentProjectId // Передаем projectId в данные узла React Flow
+                    result.name || `${serviceType}-service`,
+                    currentProjectId
                 );
                 setNodes((prevNodes) => [...prevNodes, newNode]);
             }
@@ -385,12 +390,11 @@ const DashboardForMain = () => {
         } finally {
             setContextMenu(null);
         }
-    }, [currentProjectId, contextMenu, setNodes]); // Зависимость от currentProjectId
+    }, [currentProjectId, contextMenu, setNodes]);
 
     const handleChangeRepo = () => {
         localStorage.removeItem('repo');
-        // Очищаем и projectId при смене репозитория
-        localStorage.removeItem('projectId'); 
+        localStorage.removeItem('projectId');
         navigate('/projects');
     };
 
@@ -451,7 +455,7 @@ const DashboardForMain = () => {
 
 export default DashboardForMain;
 
-// --- STYLES --- (без изменений)
+// --- STYLES ---
 const fade = keyframes`
   0% { opacity: 0.2; }
   50% { opacity: 0.6; }
@@ -506,11 +510,10 @@ const SwitchButton = styled.button`
 
 const Content = styled.div`
   flex-grow: 1;
+  /* !!! ИЗМЕНЕНИЕ: Content теперь Flex контейнер для GraphWrapper и SidebarWrapper */
   display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
+  position: relative; /* Важно для позиционирования SidebarWrapper */
+  overflow: hidden; /* Чтобы сайдбар не выходил за границы */
 `;
 
 const Spinner = styled.div`
@@ -536,7 +539,7 @@ const Message = styled.p`
 `;
 
 const GraphWrapper = styled.div`
-  width: 100%;
+  flex-grow: 1; /* !!! ИЗМЕНЕНИЕ: Позволяет GraphWrapper занимать оставшееся место */
   height: 100%;
   position: relative;
   background: #fafafa;
