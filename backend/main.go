@@ -639,13 +639,23 @@ func createAuthServiceDB(appName, secret, projectIDStr string) error {
 
 // handleCreateAuthService создает новый сервис авторизации (приложение) для проекта
 func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
+	// --- CORS-заголовки ---
+	// ВНИМАНИЕ: Если вы разделили обработчики OPTIONS и POST в main.go,
+	// то 'Access-Control-Allow-Methods' для POST запроса может быть просто "POST".
+	// Однако, оставляем его полным для обеспечения совместимости, если не разделено.
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
-	requestsTotal.WithLabelValues("/api/projects/{project_id}/auth-services", r.Method).Inc()
+	// --- Метрики (если используются) ---
+	// if requestsTotal != nil {
+	// 	requestsTotal.WithLabelValues("/api/projects/{project_id}/auth-services", r.Method).Inc()
+	// }
 
+	// --- Обработка OPTIONS-запросов (preflight) ---
+	// Если этот маршрут обрабатывается Gorilla Mux только для POST,
+	// а OPTIONS обрабатывается отдельно, этот блок можно убрать.
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -655,65 +665,96 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- Проверка авторизации ---
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
+		log.Println("Unauthorized attempt to create auth service: User ID not found in context.")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // В текущей реализации не используется, но может понадобиться для проверки прав
+	// userID := raw.(string) // ID авторизованного пользователя, если нужен для проверки прав
 
+	// --- Декодирование тела запроса ---
 	var req struct {
-		Name string `json:"name"`
+		Name string `json:"name"` // Имя приложения для аутентификации
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid input", http.StatusBadRequest)
+		log.Printf("ERROR: Invalid request body for creating auth service: %v", err)
+		http.Error(w, "Invalid input format or unknown fields provided", http.StatusBadRequest)
 		return
 	}
 	if req.Name == "" {
+		log.Println("ERROR: Auth service name is required but was empty.")
 		http.Error(w, "App name is required", http.StatusBadRequest)
 		return
 	}
 
-	// Получаем project_id из URL-пути
+	// --- Получение project_id из URL ---
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok || projectIDStr == "" {
+		log.Println("ERROR: Missing project_id in URL for creating auth service.")
 		http.Error(w, "Missing project_id in URL", http.StatusBadRequest)
 		return
 	}
-
-	secret := generateSecret()
-
-	// Создаём запись в базе данных
-	err := createAuthServiceDB(req.Name, secret, projectIDStr)
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
 	if err != nil {
-		log.Printf("Failed to create auth service in DB: %v", err)
-		http.Error(w, fmt.Sprintf("Failed to create auth service: %v", err), http.StatusInternalServerError)
+		log.Printf("ERROR: Invalid project_id in URL '%s': %v", projectIDStr, err)
+		http.Error(w, "Invalid project ID format", http.StatusBadRequest)
 		return
 	}
 
-	// Получаем ID только что созданного приложения (auth-сервиса)
-	var newAppID int32
-	// Это предполагает, что 'apps.id' является SERIAL PRIMARY KEY и last_insert_id() доступен.
-	// Для PostgreSQL, можно использовать RETURNING id
-	err = db.QueryRow("SELECT id FROM apps WHERE name = $1 AND secret = $2 AND project_id = $3 ORDER BY id DESC LIMIT 1", req.Name, secret, projectIDStr).Scan(&newAppID)
+	// --- Создание секрета для нового приложения ---
+	secret := generateSecret() // Предполагаем, что generateSecret() определена
+
+	// --- ШАГ 1: Вставляем новую запись в таблицу 'apps' ---
+	var newAppID int64 // Используем int64 для соответствия BIGINT в БД
+	// Используем RETURNING id для получения ID сразу после вставки
+	err = db.QueryRow(`
+		INSERT INTO apps (name, secret, project_id)
+		VALUES ($1, $2, $3)
+		RETURNING id
+	`, req.Name, secret, projectID).Scan(&newAppID)
 	if err != nil {
-		log.Printf("Failed to retrieve new app ID: %v", err)
-		// Все равно отправляем ответ, но без ID, если не удалось получить
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{
-			"status":  "created",
-			"secret":  secret,
-			"message": "Auth service created, but ID could not be retrieved.",
-		})
+		log.Printf("ERROR: Failed to insert new app (auth service) into 'apps' table: %v", err)
+		// Проверяем на ошибку уникального ключа (если имя уже занято)
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+			http.Error(w, "App name already exists for this project or globally", http.StatusConflict)
+		} else {
+			http.Error(w, fmt.Sprintf("Failed to create auth service: %v", err), http.StatusInternalServerError)
+		}
 		return
 	}
+	log.Printf("INFO: Successfully created app (auth service) in 'apps' table with ID: %d", newAppID)
 
+	// --- ШАГ 2: Вставляем соответствующую запись в таблицу 'services' ---
+	// Этот ID будет использоваться фронтендом для React Flow узла
+	serviceNodeID := fmt.Sprintf("auth-%d", newAppID) // Формат ID должен соответствовать фронтенду!
+	serviceNameForDashboard := req.Name + " (Auth)"   // Более наглядное имя для дашборда
+	serviceTypeForDashboard := "authentication"       // Тип сервиса для дашборда
+	servicePathForDashboard := "auth"                 // Относительный путь, может быть пустым
+
+	_, err = db.Exec(`
+		INSERT INTO services (id, project_id, name, type, status, volume, version, path, position_x, position_y)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`, serviceNodeID, projectID, serviceNameForDashboard, serviceTypeForDashboard, "pending", "", "", servicePathForDashboard, 0.0, 0.0) // Начальные позиции 0,0
+	if err != nil {
+		log.Printf("ERROR: Failed to insert service node for auth app (ID: %d) into 'services' table: %v", newAppID, err)
+		// ВНИМАНИЕ: Если здесь произошла ошибка, запись в 'apps' уже создана.
+		// В продакшене вам, возможно, понадобится транзакция, чтобы откатить вставку в 'apps'.
+		http.Error(w, fmt.Sprintf("Failed to create associated dashboard service: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("INFO: Successfully created service node in 'services' table with ID: %s for app ID: %d", serviceNodeID, newAppID)
+
+	// --- Успешный ответ ---
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":        "created",
 		"secret":        secret,
-		"authServiceId": newAppID, // Возвращаем ID созданного auth-сервиса
+		"authServiceId": newAppID,      // ID из таблицы 'apps'
+		"serviceNodeId": serviceNodeID, // ID, который будет у узла на дашборде
+		"message":       fmt.Sprintf("Auth service '%s' created and added to dashboard.", req.Name),
 	})
 }
 
