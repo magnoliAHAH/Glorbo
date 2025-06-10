@@ -132,19 +132,19 @@ const StyledNode = styled.div`
     text-align: center;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
     border: 1px solid;
-    cursor: grab; /* Изменен курсор для перетаскивания */
+    cursor: grab;
 `;
 
 const RepoNodeContainer = styled(StyledNode)`
     background-color: #e0f7fa;
     border-color: #00bcd4;
     color: #006064;
-    width: auto; /* Автоматическая ширина по содержимому */
-    min-width: 150px; /* Минимальная ширина */
-    display: inline-block; /* Позволяет содержимому определять ширину */
-    white-space: nowrap; /* Предотвращает перенос текста */
-    padding: 15px 25px; /* Увеличили отступы */
-    font-size: 1.1em; /* Увеличили шрифт */
+    width: auto;
+    min-width: 150px;
+    display: inline-block;
+    white-space: nowrap;
+    padding: 15px 25px;
+    font-size: 1.1em;
 `;
 
 const ServiceNodeContainer = styled(StyledNode)`
@@ -195,7 +195,7 @@ const nodeTypes = {
     serviceNode: ServiceNode,
 };
 
-// --- Sidebar Components ---
+// --- Sidebar Components (Оставим, если вы захотите ее использовать для других целей, но кнопка 'Add Auth Service' убрана) ---
 
 const SidebarWrapper = styled.div`
     width: ${props => (props.isOpen ? '350px' : '0')};
@@ -205,7 +205,7 @@ const SidebarWrapper = styled.div`
     transition: width 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
-    z-index: 999; /* Выше GraphWrapper, но ниже Header */
+    z-index: 999;
 `;
 
 const SidebarHeader = styled.div`
@@ -256,22 +256,10 @@ const SidebarContent = styled.div`
     }
 `;
 
-const AddServiceButton = styled.button`
-    background: #007bff;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 0.9em;
-    margin-top: 20px;
-    width: 100%;
-    &:hover {
-        background: #0056b3;
-    }
-`;
+// Кнопка для добавления сервиса аутентификации в сайдбаре УБРАНА, так как теперь это будет из контекстного меню.
+// const AddServiceButton = styled.button`...`;
 
-const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onAddAuthService }) => {
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => { // onAddAuthService УБРАН
     return (
         <SidebarWrapper isOpen={isOpen}>
             <SidebarHeader>
@@ -283,10 +271,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onAddAuthServic
                     content.type === 'repo' ? (
                         <>
                             {renderFileNodeForSidebar(content)}
-                            {/* НОВАЯ КНОПКА ДЛЯ ДОБАВЛЕНИЯ AUTH SERVICE */}
-                            <AddServiceButton onClick={() => onAddAuthService(content.id)}>
-                                + Add Authentication Service
-                            </AddServiceButton>
+                            {/* Кнопка + Add Authentication Service УБРАНА отсюда */}
                         </>
                     ) : (
                         renderServiceInfoForSidebar(content)
@@ -303,8 +288,8 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onAddAuthServic
 // --- Context Menu Component ---
 
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
-    // ИЗМЕНЕНИЕ: Убрали 'auth' из списка, так как для него будет отдельная кнопка в сайдбаре
-    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'nginx', 'message-queue'];
+    // ИЗМЕНЕНИЕ: Вернули 'auth' в список serviceTypes
+    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'auth', 'nginx', 'message-queue'];
 
     return (
         <ContextMenuWrapper style={{ left: x, top: y }} onMouseLeave={onClose}>
@@ -326,10 +311,10 @@ const DashboardForMain = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [currentRepoUrl, setCurrentRepoUrl] = useState('');
-    const [structure, setStructure] = useState(null); // Здесь будет храниться вся структура репо
-    const [contextMenu, setContextMenu] = useState(null); // Состояние для контекстного меню
+    const [structure, setStructure] = useState(null);
+    const [contextMenu, setContextMenu] = useState(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [sidebarContent, setSidebarContent] = useState(null); // Содержимое сайдбара
+    const [sidebarContent, setSidebarContent] = useState(null);
 
     const location = useLocation();
     const navigate = useNavigate();
@@ -347,14 +332,13 @@ const DashboardForMain = () => {
             setLoading(true);
             setError(null);
             try {
-                // Извлекаем имя проекта из URL (для запроса к бэкенду)
                 const repoName = repoFromStorage.split('/').pop();
                 if (!repoName) {
                     throw new Error("Invalid repository URL in local storage.");
                 }
 
                 const response = await fetch(`/api/repo-tree?repoName=${encodeURIComponent(repoName)}`, {
-                    credentials: 'include' // Это важно для отправки куки с токеном
+                    credentials: 'include'
                 });
 
                 if (!response.ok) {
@@ -367,9 +351,8 @@ const DashboardForMain = () => {
                 }
 
                 const fetchedStructure = await response.json();
-                setStructure(fetchedStructure); // Сохраняем всю структуру
+                setStructure(fetchedStructure);
 
-                // Преобразуем структуру в узлы и ребра для React Flow
                 const { nodes: initialNodes, edges: initialEdges } = convertFileNodeToReactFlowElements(fetchedStructure);
                 setNodes(initialNodes);
                 setEdges(initialEdges);
@@ -386,71 +369,58 @@ const DashboardForMain = () => {
     }, [navigate]);
 
 
-    // Обработчик для создания нового сервиса (вызывается из контекстного меню)
+    // ИЗМЕНЕННЫЙ ОБРАБОТЧИК: Создание сервиса (теперь различает обычные и auth-сервисы)
     const handleCreateService = useCallback(async (serviceType) => {
-        // ИЗМЕНЕНИЕ 1: Проверяем, что структура и её имя доступны
-        if (!structure || !structure.name) {
-            alert('Project name not found from loaded structure. Cannot create service.');
+        if (!structure || !structure.name || !structure.id) { // Убедимся, что projectId доступен
+            alert('Project information (name or ID) not found from loaded structure. Cannot create service.');
             return;
         }
 
         const position = { x: contextMenu.x, y: contextMenu.y };
 
         try {
-            // ИЗМЕНЕНИЕ 2: Замените currentRepoName на structure.name
-            const result = await createService(structure.name, serviceType, position);
-            alert(`Service created: ${result.serviceId}`);
+            if (serviceType === 'auth') {
+                // Если выбран 'auth', запрашиваем имя приложения и используем createAuthService
+                const appName = prompt('Enter a name for the authentication service (e.g., "Google Auth", "Auth0"):');
+                if (!appName) {
+                    alert('Authentication service name cannot be empty.');
+                    return;
+                }
 
-            const newNode = createReactFlowServiceNode(result.serviceId, serviceType, position, result.name);
-            setNodes((prevNodes) => [...prevNodes, newNode]);
+                const result = await createAuthService(structure.id, appName); // <--- ИСПОЛЬЗУЕМ structure.id
+                alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
+                console.log('Created Auth Service:', result);
+
+                const newNodeId = `auth-service-${result.authServiceId}`;
+                const newAuthServiceNode = {
+                    id: newNodeId,
+                    position: position, // Используем позицию из контекстного меню
+                    type: 'serviceNode',
+                    data: {
+                        id: result.authServiceId,
+                        name: appName,
+                        serviceType: 'authentication', // Отличаем от общего 'auth'
+                        status: 'Active',
+                        projectId: structure.id,
+                    },
+                    draggable: true,
+                };
+                setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
+
+            } else {
+                // Для всех остальных типов сервисов используем createService
+                const result = await createService(structure.name, serviceType, position); // <--- ИСПОЛЬЗУЕМ structure.name
+                alert(`Service created: ${result.serviceId}`);
+
+                const newNode = createReactFlowServiceNode(result.serviceId, serviceType, position, result.name);
+                setNodes((prevNodes) => [...prevNodes, newNode]);
+            }
 
         } catch (error) {
             console.error('Failed to create service:', error.message);
             alert(`Failed to create service: ${error.message}`);
         }
-        // ИЗМЕНЕНИЕ 3: Добавьте 'structure' в массив зависимостей useCallback
-    }, [structure, contextMenu, setNodes]);
-
-
-    // НОВЫЙ ОБРАБОТЧИК: Создание специфического сервиса аутентификации (вызывается из сайдбара)
-    const handleAddAuthService = useCallback(async (projectId) => {
-        const appName = prompt('Enter a name for the authentication service (e.g., "Google Auth", "Auth0"):');
-        if (!appName) {
-            alert('Authentication service name cannot be empty.');
-            return;
-        }
-
-        try {
-            const result = await createAuthService(projectId, appName);
-            alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
-            console.log('Created Auth Service:', result);
-
-            // Опционально: если вы хотите добавить узел для этого auth-сервиса на холст React Flow
-            // ID для нового узла может быть уникальным (например, 'auth-service-' + result.authServiceId)
-            // Позицию можно взять из sidebarContent.position (позиция репо-узла)
-            const newNodeId = `auth-service-${result.authServiceId}`;
-            const newNodePosition = { x: (sidebarContent?.position?.x || 50) + 200, y: (sidebarContent?.position?.y || 50) + 100 };
-            
-            const newAuthServiceNode = {
-                id: newNodeId,
-                position: newNodePosition,
-                type: 'serviceNode', // Используем существующий тип serviceNode
-                data: {
-                    id: result.authServiceId,
-                    name: appName,
-                    serviceType: 'authentication', // Укажите, что это специфический тип auth
-                    status: 'Active', // Или другой статус по умолчанию
-                    projectId: projectId,
-                },
-                draggable: true,
-            };
-            setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
-
-        } catch (error) {
-            console.error('Failed to create authentication service:', error.message);
-            alert(`Failed to create authentication service: ${error.message}`);
-        }
-    }, [setNodes, sidebarContent]);
+    }, [structure, contextMenu, setNodes]); // structure.id добавлен как зависимость
 
 
     // Обработчик соединения ребер
@@ -458,7 +428,6 @@ const DashboardForMain = () => {
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        // ИЗМЕНЕНИЕ: Используем structure.name, если доступно, иначе currentRepoUrl.split('/').pop()
         const projectNameForUpdate = structure?.name || currentRepoUrl?.split('/').pop();
 
         if ((node.type === 'repoNode' || node.type === 'serviceNode') && projectNameForUpdate) {
@@ -469,19 +438,16 @@ const DashboardForMain = () => {
                 console.error(`Failed to update position for node ${node.id}:`, error.message);
             }
         }
-        // ИЗМЕНЕНИЕ: Добавляем structure и currentRepoUrl в зависимости
     }, [structure, currentRepoUrl]);
 
     // Обработчик клика по узлу (для открытия сайдбара)
     const onNodeClick = useCallback((event, node) => {
         setIsSidebarOpen(true);
-        // Сохраняем не только id и type, но и всю data узла, и его позицию
         setSidebarContent({
             id: node.id,
             type: node.type === 'repoNode' ? 'repo' : 'service',
             data: node.data,
-            position: node.position, // Добавляем позицию узла
-            // Если это RepoNode, то передаем структуру файлов для отображения
+            position: node.position,
             ...(node.type === 'repoNode' && structure ? { fileStructure: structure.files } : {})
         });
     }, [structure]);
@@ -489,7 +455,7 @@ const DashboardForMain = () => {
 
     // Обработчик ПКМ по фону (для открытия контекстного меню)
     const onPaneContextMenu = useCallback((event) => {
-        event.preventDefault(); // Предотвращаем стандартное контекстное меню браузера
+        event.preventDefault();
         setContextMenu({
             x: event.clientX,
             y: event.clientY,
@@ -522,9 +488,9 @@ const DashboardForMain = () => {
                             onConnect={onConnect}
                             onNodeDragStop={onNodeDragStop}
                             onNodeClick={onNodeClick}
-                            onPaneContextMenu={onPaneContextMenu} // Обработчик ПКМ по фону
-                            nodeTypes={nodeTypes} // Передаем кастомные узлы
-                            fitView // Автоматически центрировать и масштабировать схему
+                            onPaneContextMenu={onPaneContextMenu}
+                            nodeTypes={nodeTypes}
+                            fitView
                             attributionPosition="bottom-left"
                         >
                             <MiniMap />
@@ -539,8 +505,8 @@ const DashboardForMain = () => {
                             <ContextMenu
                                 x={contextMenu.x}
                                 y={contextMenu.y}
-                                onCreateService={handleCreateService} // Для общих сервисов
-                                onClose={() => setContextMenu(null)} // Закрыть меню
+                                onCreateService={handleCreateService} // Теперь handleCreateService различает типы
+                                onClose={() => setContextMenu(null)}
                             />
                         )}
                     </GraphWrapper>
@@ -551,7 +517,7 @@ const DashboardForMain = () => {
                 isOpen={isSidebarOpen}
                 content={sidebarContent}
                 onClose={() => setIsSidebarOpen(false)}
-                onAddAuthService={handleAddAuthService} // ПЕРЕДАЕМ НОВУЮ ФУНКЦИЮ ДЛЯ AUTH-СЕРВИСОВ
+                // onAddAuthService={handleAddAuthService} - Эта функция больше не нужна, если все через контекстное меню
             />
         </Page>
     );
