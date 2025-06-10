@@ -498,105 +498,74 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateNodePosition обновляет позицию узла (сервиса) в БД
 func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
-	// Установка CORS-заголовков
+	// Установка CORS-заголовков для POST-запроса
+	// Gorilla Mux должен настроить их для OPTIONS-запросов отдельно
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Важно для preflight-запросов
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization") // Укажите все заголовки, используемые фронтендом
+	w.Header().Set("Access-Control-Allow-Methods", "POST")                        // В этом обработчике ожидаем только POST
 
-	// Если requestsTotal инициализирован, увеличиваем метрику
-	// if requestsTotal != nil {
-	// 	requestsTotal.WithLabelValues("/api/update-node-position", r.Method).Inc()
-	// }
-
-	// Обработка OPTIONS-запросов (preflight)
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	// --- Проверка авторизации (предполагается, что userIDKey определен и используется) ---
+	// Проверка авторизации: если middleware WithAuth работает правильно,
+	// userIDKey должен быть в контексте.
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		// Это не должно произойти, если WithAuth работает, но как запасной вариант.
+		http.Error(w, "Unauthorized: User ID not found in context", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // Если требуется ID пользователя для проверки прав
+	// userID := raw.(string) // Если нужен ID пользователя, раскомментируйте
 
-	// --- Декодирование тела запроса ---
+	// Декодирование тела запроса (NodeID, Position, ProjectID)
 	var req struct {
 		NodeID    string   `json:"nodeId"`
 		Position  Position `json:"position"`
-		ProjectID int64    `json:"projectId"` // Ожидаем projectId, как отправляет фронтенд
+		ProjectID int64    `json:"projectId"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields() // Не разрешать неизвестные поля для строгой валидации
+	// decoder.DisallowUnknownFields() // Уберем для простоты, если есть проблемы с парсингом
 
 	if err := decoder.Decode(&req); err != nil {
-		log.Printf("Error decoding request body: %v", err)
-		http.Error(w, "Invalid request body format or unknown fields provided", http.StatusBadRequest)
+		log.Printf("ERROR: Failed to decode request body: %v", err)
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
 		return
 	}
 
-	// --- Валидация полей запроса ---
-	if req.NodeID == "" {
-		http.Error(w, "Node ID is required", http.StatusBadRequest)
+	// Базовая валидация полученных данных
+	if req.NodeID == "" || req.ProjectID <= 0 {
+		http.Error(w, "Node ID and valid Project ID are required", http.StatusBadRequest)
 		return
 	}
-	if req.ProjectID == 0 { // ProjectID должен быть > 0
-		http.Error(w, "Project ID is required and must be a positive integer", http.StatusBadRequest)
-		return
-	}
-	// Можно добавить валидацию для Position.X и Position.Y, если они имеют ограничения
 
-	// --- Проверка прав пользователя на проект (пример, если у вас есть такая логика) ---
-	// Если у вас есть таблица users_projects, можно проверить:
-	// var exists bool
-	// err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM users_projects WHERE user_id = $1 AND project_id = $2)", userID, req.ProjectID).Scan(&exists)
-	// if err != nil {
-	// 	log.Printf("Database error checking project access: %v", err)
-	// 	http.Error(w, "Internal server error during access check", http.StatusInternalServerError)
-	// 	return
-	// }
-	// if !exists {
-	// 	http.Error(w, "Access denied: Project not found or user does not have access", http.StatusForbidden)
-	// 	return
-	// }
-
-	// --- Обновление позиции в базе данных ---
-	// ВАЖНО: Добавляем project_id в условие WHERE для безопасности и целостности данных.
-	// Обновляем только сервисы, принадлежащие указанному ProjectID.
+	// Обновление позиции в базе данных
+	// Важно: обновление происходит только для узла с данным ID ВНУТРИ данного ProjectID
 	result, err := db.Exec(`
-        UPDATE services
-        SET position_x = $1, position_y = $2
-        WHERE id = $3 AND project_id = $4
-    `, req.Position.X, req.Position.Y, req.NodeID, req.ProjectID)
+		UPDATE services
+		SET position_x = $1, position_y = $2
+		WHERE id = $3 AND project_id = $4
+	`, req.Position.X, req.Position.Y, req.NodeID, req.ProjectID)
 
 	if err != nil {
-		log.Printf("Failed to update position for service %s in project %d: %v", req.NodeID, req.ProjectID, err)
-		http.Error(w, fmt.Sprintf("Failed to update node position: %v", err), http.StatusInternalServerError)
+		log.Printf("ERROR: Database update failed for node %s in project %d: %v", req.NodeID, req.ProjectID, err)
+		http.Error(w, "Failed to update node position in database", http.StatusInternalServerError)
 		return
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		log.Printf("Error getting rows affected after update: %v", err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
+		log.Printf("ERROR: Failed to get rows affected after update: %v", err)
+		// Не возвращаем ошибку пользователю, это внутренняя проблема.
 	}
 
 	if rowsAffected == 0 {
-		// Если ни одна строка не затронута, это может означать:
-		// 1. Сервис с таким ID не существует.
-		// 2. Сервис с таким ID существует, но не принадлежит данному ProjectID.
-		// 3. Позиции уже были такими же, и база данных не произвела изменений.
-		log.Printf("No service found with ID %s for project %d, or no changes made.", req.NodeID, req.ProjectID)
-		http.Error(w, "Service not found for this project, or position already up-to-date", http.StatusNotFound)
+		// Если 0 строк затронуто, значит, либо такого узла нет, либо он не в этом проекте,
+		// либо позиции не изменились.
+		log.Printf("INFO: No changes made or node %s not found for project %d.", req.NodeID, req.ProjectID)
+		http.Error(w, "Node not found or position already up-to-date", http.StatusNotFound)
 		return
 	}
 
-	// --- Успешный ответ ---
+	// Успешный ответ
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Node position updated successfully"})
 }
