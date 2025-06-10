@@ -19,8 +19,8 @@ import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfo
 // --- Styled Components ---
 
 const fadeIn = keyframes`
-  from { opacity: 0; }
-  to { opacity: 1; }
+    from { opacity: 0; }
+    to { opacity: 1; }
 `;
 
 const Page = styled.div`
@@ -195,7 +195,7 @@ const nodeTypes = {
     serviceNode: ServiceNode,
 };
 
-// --- Sidebar Components (Оставим, если вы захотите ее использовать для других целей, но кнопка 'Add Auth Service' убрана) ---
+// --- Sidebar Components ---
 
 const SidebarWrapper = styled.div`
     width: ${props => (props.isOpen ? '350px' : '0')};
@@ -256,10 +256,7 @@ const SidebarContent = styled.div`
     }
 `;
 
-// Кнопка для добавления сервиса аутентификации в сайдбаре УБРАНА, так как теперь это будет из контекстного меню.
-// const AddServiceButton = styled.button`...`;
-
-const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => { // onAddAuthService УБРАН
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
     return (
         <SidebarWrapper isOpen={isOpen}>
             <SidebarHeader>
@@ -271,7 +268,6 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => { // onAdd
                     content.type === 'repo' ? (
                         <>
                             {renderFileNodeForSidebar(content)}
-                            {/* Кнопка + Add Authentication Service УБРАНА отсюда */}
                         </>
                     ) : (
                         renderServiceInfoForSidebar(content)
@@ -288,7 +284,6 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => { // onAdd
 // --- Context Menu Component ---
 
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
-    // ИЗМЕНЕНИЕ: Вернули 'auth' в список serviceTypes
     const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'auth', 'nginx', 'message-queue'];
 
     return (
@@ -311,7 +306,7 @@ const DashboardForMain = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [currentRepoUrl, setCurrentRepoUrl] = useState('');
-    const [structure, setStructure] = useState(null);
+    const [structure, setStructure] = useState(null); // Здесь будет храниться объект FileNode репозитория
     const [contextMenu, setContextMenu] = useState(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [sidebarContent, setSidebarContent] = useState(null);
@@ -332,12 +327,8 @@ const DashboardForMain = () => {
             setLoading(true);
             setError(null);
             try {
-                const repoName = repoFromStorage.split('/').pop();
-                if (!repoName) {
-                    throw new Error("Invalid repository URL in local storage.");
-                }
-
-                const response = await fetch(`/api/repo-tree?repoName=${encodeURIComponent(repoName)}`, {
+                // ИЗМЕНЕНИЕ 1: Передаем полный URL репозитория в параметре 'repo'
+                const response = await fetch(`/api/repo-tree?repo=${encodeURIComponent(repoFromStorage)}`, {
                     credentials: 'include'
                 });
 
@@ -351,8 +342,9 @@ const DashboardForMain = () => {
                 }
 
                 const fetchedStructure = await response.json();
-                setStructure(fetchedStructure);
+                setStructure(fetchedStructure); // Сохраняем полную структуру
 
+                // ИЗМЕНЕНИЕ 2: Убедитесь, что convertFileNodeToReactFlowElements может принять fetchedStructure.projectId
                 const { nodes: initialNodes, edges: initialEdges } = convertFileNodeToReactFlowElements(fetchedStructure);
                 setNodes(initialNodes);
                 setEdges(initialEdges);
@@ -369,58 +361,64 @@ const DashboardForMain = () => {
     }, [navigate]);
 
 
-    // ИЗМЕНЕННЫЙ ОБРАБОТЧИК: Создание сервиса (теперь различает обычные и auth-сервисы)
+    // ОБНОВЛЕННЫЙ ОБРАБОТЧИК: Создание сервиса
     const handleCreateService = useCallback(async (serviceType) => {
-        if (!structure || !structure.name || !structure.id) { // Убедимся, что projectId доступен
-            alert('Project information (name or ID) not found from loaded structure. Cannot create service.');
+        // ИЗМЕНЕНИЕ 3: Получаем numeric projectId из fetchedStructure
+        // Предполагается, что `structure` (FileNode root) содержит поле `projectId` (число)
+        if (!structure || typeof structure.projectId !== 'number') {
+            alert('Project ID not found in loaded structure or is invalid. Cannot create service.');
+            console.error('Structure or ProjectID is invalid:', structure);
             return;
         }
 
+        const projectIdToUse = structure.projectId;
         const position = { x: contextMenu.x, y: contextMenu.y };
 
         try {
             if (serviceType === 'auth') {
-                // Если выбран 'auth', запрашиваем имя приложения и используем createAuthService
                 const appName = prompt('Enter a name for the authentication service (e.g., "Google Auth", "Auth0"):');
                 if (!appName) {
                     alert('Authentication service name cannot be empty.');
                     return;
                 }
 
-                const result = await createAuthService(structure.id, appName); // <--- ИСПОЛЬЗУЕМ structure.id
+                const result = await createAuthService(projectIdToUse, appName); // Используем numeric projectIdToUse
                 alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
                 console.log('Created Auth Service:', result);
 
                 const newNodeId = `auth-service-${result.authServiceId}`;
                 const newAuthServiceNode = {
                     id: newNodeId,
-                    position: position, // Используем позицию из контекстного меню
+                    position: position,
                     type: 'serviceNode',
                     data: {
                         id: result.authServiceId,
                         name: appName,
-                        serviceType: 'authentication', // Отличаем от общего 'auth'
+                        serviceType: 'authentication',
                         status: 'Active',
-                        projectId: structure.id,
+                        projectId: projectIdToUse, // Сохраняем numeric projectId в данных узла
                     },
                     draggable: true,
                 };
                 setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
 
             } else {
-                // Для всех остальных типов сервисов используем createService
-                const result = await createService(structure.name, serviceType, position); // <--- ИСПОЛЬЗУЕМ structure.name
+                // Для всех остальных типов сервисов
+                const result = await createService(projectIdToUse, serviceType, position); // Используем numeric projectIdToUse
                 alert(`Service created: ${result.serviceId}`);
 
-                const newNode = createReactFlowServiceNode(result.serviceId, serviceType, position, result.name);
+                // Передаем numeric projectIdToUse в createReactFlowServiceNode
+                const newNode = createReactFlowServiceNode(result.serviceId, serviceType, position, result.name, projectIdToUse);
                 setNodes((prevNodes) => [...prevNodes, newNode]);
             }
 
         } catch (error) {
             console.error('Failed to create service:', error.message);
             alert(`Failed to create service: ${error.message}`);
+        } finally {
+            setContextMenu(null); // Закрываем контекстное меню после создания
         }
-    }, [structure, contextMenu, setNodes]); // structure.id добавлен как зависимость
+    }, [structure, contextMenu, setNodes]); // structure добавлен как зависимость
 
 
     // Обработчик соединения ребер
@@ -428,27 +426,40 @@ const DashboardForMain = () => {
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        const projectNameForUpdate = structure?.name || currentRepoUrl?.split('/').pop();
+        // Убедитесь, что structure.name корректно представляет имя проекта
+        // или получите project ID из узла, если он есть
+        const projectNameForUpdate = structure?.name; // Или structure.name, если это имя проекта
+        if (!projectNameForUpdate) {
+            console.warn('Project name not available for updating node position.');
+            return;
+        }
 
-        if ((node.type === 'repoNode' || node.type === 'serviceNode') && projectNameForUpdate) {
+        if (node.type === 'repoNode' || node.type === 'serviceNode') {
             try {
+                // В вашем бэкенде updateNodePosition, вероятно, ожидает ProjectID, а не ProjectName
+                // Вам нужно будет передать ProjectID сюда, если бэкенд это требует.
+                // На данный момент updateNodePosition в api.js принимает projectName
+                // Если updateNodePosition в Go ожидает project_id, то node.data.projectId
+                // должен быть передан сюда.
+                // console.log("Updating node position for:", node.id, node.position, projectNameForUpdate);
                 await updateNodePosition(node.id, node.position, projectNameForUpdate);
                 console.log(`Updated position for node ${node.id}`);
             } catch (error) {
                 console.error(`Failed to update position for node ${node.id}:`, error.message);
             }
         }
-    }, [structure, currentRepoUrl]);
+    }, [structure]); // Добавьте structure в зависимости, если projectNameForUpdate зависит от него
 
     // Обработчик клика по узлу (для открытия сайдбара)
     const onNodeClick = useCallback((event, node) => {
         setIsSidebarOpen(true);
+        // Передаем полную информацию о узле для отображения в сайдбаре
         setSidebarContent({
             id: node.id,
             type: node.type === 'repoNode' ? 'repo' : 'service',
-            data: node.data,
+            data: node.data, // node.data уже содержит projectId
             position: node.position,
-            ...(node.type === 'repoNode' && structure ? { fileStructure: structure.files } : {})
+            ...(node.type === 'repoNode' && structure ? { fileStructure: structure.children || structure.files } : {}) // Используйте structure.children или structure.files
         });
     }, [structure]);
 
@@ -498,6 +509,7 @@ const DashboardForMain = () => {
                             <Background variant="dots" gap={12} size={1} />
                             <Panel position="top-right">
                                 {structure && structure.name && <div>Current Repo: <strong>{structure.name}</strong></div>}
+                                {structure && typeof structure.projectId === 'number' && <div>Project ID: <strong>{structure.projectId}</strong></div>}
                             </Panel>
                         </ReactFlow>
 
@@ -505,7 +517,7 @@ const DashboardForMain = () => {
                             <ContextMenu
                                 x={contextMenu.x}
                                 y={contextMenu.y}
-                                onCreateService={handleCreateService} // Теперь handleCreateService различает типы
+                                onCreateService={handleCreateService}
                                 onClose={() => setContextMenu(null)}
                             />
                         )}
@@ -517,7 +529,6 @@ const DashboardForMain = () => {
                 isOpen={isSidebarOpen}
                 content={sidebarContent}
                 onClose={() => setIsSidebarOpen(false)}
-                // onAddAuthService={handleAddAuthService} - Эта функция больше не нужна, если все через контекстное меню
             />
         </Page>
     );
