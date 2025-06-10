@@ -10,103 +10,131 @@ import ReactFlow, {
     addEdge,
     Panel,
 } from 'reactflow';
-// Импортируем функции API и утилиты
-import { createService, updateNodePosition } from '../functions/api/api'; // getRepoTree не нужен напрямую, т.к. вы уже фечите структуру
+import 'reactflow/dist/style.css'; 
+
+// Импорты API и утилит
+import { createService, updateNodePosition, getRepoTree, createAuthService } from '../src/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
-// --- Кастомные узлы React Flow с styled-components ---
+// --- Styled Components --- (без изменений)
+const fadeIn = keyframes`
+    from { opacity: 0; }
+    to { opacity: 1; }
+`;
 
-const StyledNode = styled.div`
-    padding: 10px;
-    border-radius: 8px;
-    font-size: 0.9em;
-    text-align: center;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    cursor: grab;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    min-width: 150px;
-    min-height: 60px;
-    transition: box-shadow 0.2s ease, transform 0.1s ease;
+const ContextMenuWrapper = styled.div`
+    position: absolute;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    padding: 5px 0;
+    animation: ${fadeIn} 0.1s ease-out;
+`;
 
-    &:active {
-        cursor: grabbing;
-        box-shadow: 0 6px 15px rgba(0,0,0,0.2);
-        transform: translateY(-2px);
-    }
+const ContextMenuItem = styled.div`
+    padding: 8px 15px;
+    cursor: pointer;
     &:hover {
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        background-color: #f0f0f0;
     }
+`;
+
+// --- Custom Nodes for React Flow --- (без изменений)
+const StyledNode = styled.div`
+    padding: 10px 15px;
+    border-radius: 5px;
+    font-weight: bold;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+    border: 1px solid;
+    cursor: grab;
 `;
 
 const RepoNodeContainer = styled(StyledNode)`
-    background-color: #e0f7fa; /* Легкий циан */
-    border: 2px solid #00bcd4; /* Цвет циан */
-    color: #00796b;
-    cursor: pointer; /* Курсор для кликабельности */
-    &:hover {
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        transform: scale(1.02);
-    }
+    background-color: #e0f7fa;
+    border-color: #00bcd4;
+    color: #006064;
+    width: auto;
+    min-width: 150px;
+    display: inline-block;
+    white-space: nowrap;
+    padding: 15px 25px;
+    font-size: 1.1em;
 `;
 
 const ServiceNodeContainer = styled(StyledNode)`
-    background-color: #e8f5e9; /* Светло-зеленый */
-    border: 2px solid #4caf50; /* Зеленый */
-    color: #2e7d32;
+    background-color: ${props => {
+        switch (props.serviceType) {
+            case 'backend': return '#ffe0b2';
+            case 'frontend': return '#c8e6c9';
+            case 'database': return '#bbdefb';
+            case 'redis': return '#ffccbc';
+            case 'auth':
+            case 'authentication': return '#e1bee7'; 
+            case 'nginx': return '#f5f5dc';
+            case 'message-queue': return '#ffcdd2';
+            default: return '#f5f5f5';
+        }
+    }};
+    border-color: ${props => {
+        switch (props.serviceType) {
+            case 'backend': return '#ff9800';
+            case 'frontend': return '#4caf50';
+            case 'database': return '#2196f3';
+            case 'redis': return '#ff5722';
+            case 'auth':
+            case 'authentication': return '#9c27b0';
+            case 'nginx': return '#cddc39';
+            case 'message-queue': return '#ef5350';
+            default: return '#cccccc';
+        }
+    }};
+    color: #333;
+    font-size: 0.9em;
 `;
 
-const RepoNode = ({ data, onClick }) => (
-    <RepoNodeContainer onClick={onClick}>
-        📦 <strong>{data.name}</strong> <br/>
-        <small>({data.type.toUpperCase()})</small>
+const RepoNode = ({ data }) => (
+    <RepoNodeContainer>
+        📦 {data.name || 'Repository'}
     </RepoNodeContainer>
 );
 
 const ServiceNode = ({ data }) => (
-    <ServiceNodeContainer>
-        🚀 <strong>{data.name}</strong> <br/>
-        <small>Type: {data.serviceType || 'N/A'}</small> <br/>
-        <small>Status: {data.status || 'N/A'}</small>
+    <ServiceNodeContainer serviceType={data.serviceType}>
+        ⚙️ {data.name || 'Service'} ({data.serviceType})
     </ServiceNodeContainer>
 );
 
 const nodeTypes = {
     repoNode: RepoNode,
     serviceNode: ServiceNode,
-    // Если вам нужны другие узлы (folder, file) на канвасе изначально,
-    // вы можете добавить их здесь и стилизовать
 };
 
-// --- Боковое меню (Sidebar) с styled-components ---
-
+// --- Sidebar Components --- (без изменений)
 const SidebarWrapper = styled.div`
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: ${({ isOpen }) => (isOpen ? '400px' : '0')};
-    height: 100%;
+    width: ${props => (props.isOpen ? '350px' : '0')};
     background-color: #fff;
-    box-shadow: -4px 0 15px rgba(0, 0, 0, 0.2);
-    transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-    overflow-x: hidden;
-    overflow-y: auto;
-    z-index: 200;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: width 0.3s ease-in-out;
     display: flex;
     flex-direction: column;
-    padding: ${({ isOpen }) => (isOpen ? '20px' : '0')};
-    box-sizing: border-box; /* Важно для padding */
+    z-index: 999;
 `;
 
 const SidebarHeader = styled.div`
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #eee;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding-bottom: 15px;
-    border-bottom: 1px solid #eee;
-    margin-bottom: 15px;
+    h3 {
+        margin: 0;
+        color: #333;
+    }
 `;
 
 const CloseButton = styled.button`
@@ -114,8 +142,7 @@ const CloseButton = styled.button`
     border: none;
     font-size: 1.5em;
     cursor: pointer;
-    color: #888;
-    transition: color 0.2s ease;
+    color: #666;
     &:hover {
         color: #333;
     }
@@ -123,7 +150,26 @@ const CloseButton = styled.button`
 
 const SidebarContent = styled.div`
     flex-grow: 1;
-    color: #333;
+    padding: 20px;
+    overflow-y: auto;
+    font-size: 0.9em;
+    color: #555;
+
+    pre {
+        background-color: #f4f4f4;
+        padding: 10px;
+        border-radius: 4px;
+        overflow-x: auto;
+    }
+
+    ul {
+        list-style: none;
+        padding: 0;
+    }
+
+    li {
+        margin-bottom: 5px;
+    }
 `;
 
 const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
@@ -136,9 +182,11 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
             <SidebarContent>
                 {content ? (
                     content.type === 'repo' ? (
-                        renderFileNodeForSidebar(content) // Для репозитория рендерим дерево
+                        <>
+                            {renderFileNodeForSidebar(content)}
+                        </>
                     ) : (
-                        renderServiceInfoForSidebar(content) // Для сервиса рендерим плоскую инфу
+                        renderServiceInfoForSidebar(content)
                     )
                 ) : (
                     <p>Select a node to view its details.</p>
@@ -148,31 +196,10 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
     );
 };
 
-// --- Контекстное меню (ПКМ) с styled-components ---
 
-const ContextMenuWrapper = styled.div`
-    position: absolute;
-    z-index: 1000;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    padding: 5px 0;
-`;
-
-const ContextMenuItem = styled.div`
-    padding: 8px 15px;
-    cursor: pointer;
-    font-size: 0.9em;
-    color: #333;
-
-    &:hover {
-        background: #f0f0f0;
-    }
-`;
-
+// --- Context Menu Component --- (без изменений)
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
-    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'auth', 'nginx', 'message-queue'];
+    const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'authentication', 'nginx', 'message-queue']; 
 
     return (
         <ContextMenuWrapper style={{ left: x, top: y }} onMouseLeave={onClose}>
@@ -185,32 +212,46 @@ const ContextMenu = ({ x, y, onCreateService, onClose }) => {
     );
 };
 
-// --- Основной компонент DashboardRepo ---
+
+// --- Main Dashboard Component ---
 
 const DashboardForMain = () => {
-    const [structure, setStructure] = useState(null); // Полная структура репо из API
+    const [structure, setStructure] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Состояния React Flow
+    // Добавляем состояние для projectId
+    const [currentProjectId, setCurrentProjectId] = useState(null);
+
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), [setEdges]);
 
-    // Состояния сайдбара
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    const [sidebarContent, setSidebarContent] = useState(null); // Данные для сайдбара
+    const [sidebarContent, setSidebarContent] = useState(null);
 
-    // Состояния контекстного меню
     const [contextMenu, setContextMenu] = useState(null);
 
     const location = useLocation();
     const navigate = useNavigate();
-    const currentRepoName = localStorage.getItem('repo'); // Получаем имя репозитория
+    const currentRepoUrl = localStorage.getItem('repo');
 
-    // --- Загрузка структуры репозитория при монтировании ---
+    // Изменение: useEffect для чтения projectId из localStorage один раз при монтировании
     useEffect(() => {
-        if (!currentRepoName) {
+        const storedProjectId = localStorage.getItem('projectId');
+        if (storedProjectId) {
+            // Преобразуем в число, так как в localStorage хранится строка
+            setCurrentProjectId(Number(storedProjectId));
+        } else {
+            console.warn('Project ID not found in localStorage!');
+            // Возможно, стоит перенаправить пользователя или показать ошибку
+        }
+    }, []); // Пустой массив зависимостей означает, что эффект запустится один раз
+
+
+    // Загрузка структуры репозитория
+    useEffect(() => {
+        if (!currentRepoUrl) {
             navigate('/projects');
             return;
         }
@@ -218,114 +259,138 @@ const DashboardForMain = () => {
         setLoading(true);
         setError(null);
 
-        // Используем ваш существующий fetch для структуры репозитория
-        fetch(`https://mixail.ermin33.fvds.ru/api/repo-tree?repo=${encodeURIComponent(currentRepoName)}`)
-            .then(async res => {
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.message || `Ошибка ${res.status}`);
-                return data;
-            })
+        getRepoTree(currentRepoUrl)
             .then(fetchedStructure => {
-                setStructure(fetchedStructure); // Сохраняем полную структуру
+                console.log('Fetched structure:', fetchedStructure);
+                setStructure(fetchedStructure);
 
-                // Инициализируем React Flow только узлом репозитория
+                // Теперь projectId берем из состояния currentProjectId, а не из fetchedStructure
                 const repoNodeId = fetchedStructure.id;
-                const repoNodeName = fetchedStructure.name || currentRepoName.split('/').pop();
+                const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
+
                 const initialNodes = [{
                     id: repoNodeId,
-                    position: { x: 50, y: 50 }, // Фиксированная начальная позиция
+                    position: { x: 50, y: 50 },
                     type: 'repoNode',
                     data: {
                         id: repoNodeId,
                         name: repoNodeName,
                         type: 'repo',
-                        URL: currentRepoName,
-                        ...fetchedStructure // Передаем все данные из структуры в узел
+                        URL: currentRepoUrl,
+                        projectId: currentProjectId, // Используем projectId из состояния
                     },
                     draggable: true,
                 }];
 
-                // Добавляем уже существующие сервисы на холст при загрузке
                 const { nodes: serviceNodes } = convertFileNodeToReactFlowElements(fetchedStructure);
                 const existingServiceNodes = serviceNodes.filter(n => n.type === 'serviceNode');
 
                 setNodes([...initialNodes, ...existingServiceNodes]);
-                setEdges([]); // Пока нет рёбер, если только репозиторий и сервисы
+                setEdges([]);
             })
             .catch(err => {
                 console.error('Error fetching structure:', err);
                 setError(err.message);
-                setNodes([]); // Очищаем узлы при ошибке
+                setNodes([]);
             })
             .finally(() => setLoading(false));
-    }, [currentRepoName, navigate]);
-
-
-    // --- Обработчики React Flow ---
+    }, [currentRepoUrl, navigate, currentProjectId]); // Добавляем currentProjectId в зависимости
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        if ((node.type === 'repoNode' || node.type === 'serviceNode') && currentRepoName) {
+        if ((node.type === 'repoNode' || node.type === 'serviceNode') && currentProjectId) {
             try {
-                await updateNodePosition(node.id, node.position, currentRepoName);
+                // Передаем currentProjectId в updateNodePosition
+                await updateNodePosition(node.id, node.position, currentProjectId); 
                 console.log(`Updated position for node ${node.id}`);
             } catch (error) {
                 console.error(`Failed to update position for node ${node.id}:`, error.message);
             }
         }
-    }, [currentRepoName]);
+    }, [currentProjectId]); // Зависимость от currentProjectId
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
-        setIsSidebarOpen(true); // Открываем сайдбар
+        setIsSidebarOpen(true);
 
         if (node.type === 'repoNode' && structure) {
-            setSidebarContent(structure); // Для репозитория показываем всю структуру
+            setSidebarContent({ type: 'repo', ...structure, projectId: currentProjectId }); // Добавляем projectId для отображения
         } else if (node.type === 'serviceNode') {
-            setSidebarContent(node.data); // Для сервиса показываем его данные
+            setSidebarContent({ type: 'serviceNode', ...node.data });
         } else {
-            setSidebarContent(null); // Для других узлов, если они появятся, можно очистить
+            setSidebarContent(null);
             console.log('Clicked non-special node:', node);
         }
-    }, [structure]);
+    }, [structure, currentProjectId]); // Добавляем currentProjectId в зависимости
 
     // Обработчик правого клика по фону холста (ПКМ)
     const onPaneContextMenu = useCallback((event) => {
-        event.preventDefault(); // Предотвращаем стандартное контекстное меню браузера
+        event.preventDefault();
         setContextMenu({
             x: event.clientX,
             y: event.clientY,
         });
-    }, [setContextMenu]);
+    }, []);
 
-    // Обработчик для создания нового сервиса (вызывается из контекстного меню)
-        const handleCreateService = useCallback(async (serviceType) => {
-                // ИЗМЕНЕНИЕ 1: Проверяем, что структура и её имя доступны
-                if (!structure || !structure.name) {
-                    alert('Project name not found from loaded structure. Cannot create service.');
-                    return;
-                }
-        
-                const position = { x: contextMenu.x, y: contextMenu.y };
-        
-                try {
-                    // ИЗМЕНЕНИЕ 2: Замените currentRepoName на structure.name
-                    const result = await createService(structure.name, serviceType, position);
-                    alert(`Service created: ${result.serviceId}`);
-        
-                    const newNode = createReactFlowServiceNode(result.serviceId, serviceType, position, result.name);
-                    setNodes((prevNodes) => [...prevNodes, newNode]);
-        
-                } catch (error) {
-                    console.error('Failed to create service:', error.message);
-                    alert(`Failed to create service: ${error.message}`);
-                }
-                // ИЗМЕНЕНИЕ 3: Добавьте 'structure' в массив зависимостей useCallback
-            }, [structure, contextMenu, setNodes]);
+    // Обработчик для создания нового сервиса
+    const handleCreateService = useCallback(async (serviceType) => {
+        if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+            alert('Project ID not found or is invalid. Cannot create service.');
+            console.error('Project ID is invalid for service creation:', currentProjectId);
+            setContextMenu(null);
+            return;
+        }
 
+        const position = { x: contextMenu.x, y: contextMenu.y };
+
+        try {
+            if (serviceType === 'authentication') {
+                const appName = prompt('Enter a name for the authentication service (e.g., "Google Auth", "Auth0"):');
+                if (!appName) {
+                    alert('Authentication service name cannot be empty.');
+                    return;
+                }
+                // Передаем currentProjectId
+                const result = await createAuthService(currentProjectId, appName);
+                alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
+                console.log('Created Auth Service:', result);
+
+                const newAuthServiceNode = createReactFlowServiceNode(
+                    `auth-${result.authServiceId}`,
+                    'authentication',
+                    position,
+                    appName,
+                    currentProjectId // Передаем projectId в данные узла React Flow
+                );
+                setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
+
+            } else {
+                // Передаем currentProjectId
+                const result = await createService(currentProjectId, serviceType, position);
+                alert(`Service created: ${result.serviceId}`);
+                console.log('Created Service:', result);
+
+                const newNode = createReactFlowServiceNode(
+                    result.serviceId,
+                    serviceType,
+                    position,
+                    result.name || `${serviceType}-service`, // Используем имя из результата или дефолтное
+                    currentProjectId // Передаем projectId в данные узла React Flow
+                );
+                setNodes((prevNodes) => [...prevNodes, newNode]);
+            }
+        } catch (error) {
+            console.error('Failed to create service:', error.message);
+            alert(`Failed to create service: ${error.message}`);
+        } finally {
+            setContextMenu(null);
+        }
+    }, [currentProjectId, contextMenu, setNodes]); // Зависимость от currentProjectId
 
     const handleChangeRepo = () => {
         localStorage.removeItem('repo');
+        // Очищаем и projectId при смене репозитория
+        localStorage.removeItem('projectId'); 
         navigate('/projects');
     };
 
@@ -349,16 +414,17 @@ const DashboardForMain = () => {
                             onConnect={onConnect}
                             onNodeDragStop={onNodeDragStop}
                             onNodeClick={onNodeClick}
-                            onPaneContextMenu={onPaneContextMenu} // Обработчик ПКМ по фону
-                            nodeTypes={nodeTypes} // Передаем кастомные узлы
-                            fitView // Автоматически центрировать и масштабировать схему
+                            onPaneContextMenu={onPaneContextMenu}
+                            nodeTypes={nodeTypes}
+                            fitView
                             attributionPosition="bottom-left"
                         >
                             <MiniMap />
                             <Controls />
                             <Background variant="dots" gap={12} size={1} />
                             <Panel position="top-right">
-                                {currentRepoName && <div>Current Repo: <strong>{currentRepoName.split('/').pop()}</strong></div>}
+                                {currentRepoUrl && <div>Current Repo: <strong>{currentRepoUrl.split('/').pop()}</strong></div>}
+                                {currentProjectId && <div>Project ID: <strong>{currentProjectId}</strong></div>}
                             </Panel>
                         </ReactFlow>
 
@@ -367,7 +433,7 @@ const DashboardForMain = () => {
                                 x={contextMenu.x}
                                 y={contextMenu.y}
                                 onCreateService={handleCreateService}
-                                onClose={() => setContextMenu(null)} // Закрыть меню
+                                onClose={() => setContextMenu(null)}
                             />
                         )}
                     </GraphWrapper>
@@ -385,8 +451,7 @@ const DashboardForMain = () => {
 
 export default DashboardForMain;
 
-/* --- СТИЛИ --- */
-
+// --- STYLES --- (без изменений)
 const fade = keyframes`
   0% { opacity: 0.2; }
   50% { opacity: 0.6; }
@@ -400,7 +465,7 @@ const Page = styled.div`
   padding: 0;
   margin: 0;
   box-sizing: border-box;
-  background-color: #f5f7fa; /* Светлый фон */
+  background-color: #f5f7fa;
 `;
 
 const Header = styled.div`
@@ -411,7 +476,7 @@ const Header = styled.div`
   background-color: #ffffff;
   border-bottom: 1px solid #e0e0e0;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  z-index: 10; /* Убедимся, что хедер поверх */
+  z-index: 10;
 `;
 
 const Title = styled.h2`
@@ -440,12 +505,12 @@ const SwitchButton = styled.button`
 `;
 
 const Content = styled.div`
-  flex-grow: 1; /* Занимает всё доступное пространство */
+  flex-grow: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  position: relative; /* Для позиционирования ReactFlow */
-  overflow: hidden; /* Скрыть возможные переполнения */
+  position: relative;
+  overflow: hidden;
 `;
 
 const Spinner = styled.div`
@@ -455,9 +520,9 @@ const Spinner = styled.div`
   border-top-color: #3070f0;
   border-radius: 50%;
   animation: spin 1s infinite linear;
-  position: absolute; /* Чтобы не мешал React Flow */
-  z-index: 5; /* Поверх React Flow, но под контекстным меню */
-  
+  position: absolute;
+  z-index: 5;
+
   @keyframes spin {
     to { transform: rotate(360deg); }
   }
@@ -473,9 +538,9 @@ const Message = styled.p`
 const GraphWrapper = styled.div`
   width: 100%;
   height: 100%;
-  position: relative; /* Важно для ReactFlow */
+  position: relative;
   background: #fafafa;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  overflow: hidden; /* Чтобы ReactFlow не вылезал за границы */
+  overflow: hidden;
 `;

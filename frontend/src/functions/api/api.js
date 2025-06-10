@@ -9,16 +9,26 @@ async function handleResponse(response) {
             const errorData = await response.json();
             if (errorData.message) errorMessage = errorData.message;
             else if (errorData.error) errorMessage = errorData.error;
-        } catch (e) { console.warn('Could not parse error response as JSON:', e); }
+            else if (typeof errorData === 'string') errorMessage = errorData;
+        } catch (e) { 
+            console.warn('Could not parse error response as JSON:', e); 
+            errorMessage = `${errorMessage}: ${response.statusText}`;
+        }
         throw new Error(errorMessage);
     }
     const contentLength = response.headers.get('Content-Length');
-    if (contentLength === '0' || response.status === 204) { return {}; }
+    if (contentLength === '0' || response.status === 204) { 
+        return {}; 
+    }
     return response.json();
 }
 
 export async function getProjects() {
-    const response = await fetch(`${API_BASE_URL}/projects`, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
+    const response = await fetch(`${API_BASE_URL}/projects`, { 
+        method: 'GET', 
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+    });
     return handleResponse(response);
 }
 
@@ -27,31 +37,52 @@ export async function createProject(name, url) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, url }),
+        credentials: 'include',
     });
     return handleResponse(response);
 }
 
 export async function getRepoTree(repoURL) {
-    // В вашем коде вы используете /api/structure, я адаптирую
-    // Это уже покрывается вашим fetch в DashboardRepo
-    const response = await fetch(`${API_BASE_URL}/repo-tree?repo=${encodeURIComponent(repoURL)}`, { method: 'GET', headers: { 'Content-Type': 'application/json' } });
-    return handleResponse(response);
-}
-
-export async function createService(repoName, serviceType, position) {
-    const response = await fetch(`${API_BASE_URL}/create-service`, {
-        method: 'POST',
+    const response = await fetch(`${API_BASE_URL}/repo-tree?repo=${encodeURIComponent(repoURL)}`, { 
+        method: 'GET', 
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repoName, serviceType, position }),
+        credentials: 'include',
     });
     return handleResponse(response);
 }
 
-export async function updateNodePosition(nodeId, newPosition, repoName) {
+// Изменение: теперь функция createService будет принимать projectId (число)
+// Мы будем передавать его из DashboardForMain.jsx, где он будет прочитан из localStorage
+export async function createService(projectId, serviceType, position) {
+    console.log('Sending createService request with:', { projectId, serviceType, position });
+    const response = await fetch(`${API_BASE_URL}/create-service`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: Number(projectId), serviceType, position }), 
+        credentials: 'include',
+    });
+    return handleResponse(response);
+}
+
+// Изменение: функция updateNodePosition теперь будет принимать projectId
+export async function updateNodePosition(nodeId, newPosition, projectId) { // Изменено на projectId
     const response = await fetch(`${API_BASE_URL}/update-node-position`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId, position: newPosition, repoName }),
+        body: JSON.stringify({ nodeId, position: newPosition, projectId: Number(projectId) }), // Отправляем projectId
+        credentials: 'include',
+    });
+    return handleResponse(response);
+}
+
+// Изменение: функция createAuthService будет принимать projectId
+export async function createAuthService(projectId, appName) {
+    console.log('Sending createAuthService request with:', { projectId, appName });
+    const response = await fetch(`${API_BASE_URL}/projects/${projectId}/auth-services`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: appName }),
+        credentials: 'include',
     });
     return handleResponse(response);
 }
