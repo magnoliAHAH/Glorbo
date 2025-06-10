@@ -469,7 +469,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	err := db.QueryRow("SELECT id FROM projects WHERE name = $1 AND user_id = $2", req.RepoName, userID).Scan(&projectID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Project not found for this user and repository name", http.StatusNotFound)
+			http.Error(w, "Project not found for this user and repository name", http.StatusNotFound) // ВОТ ЗДЕСЬ ВОЗНИКАЕТ 404
 			return
 		}
 		log.Printf("Database error fetching project ID for repo %s and user %s: %v", req.RepoName, userID, err)
