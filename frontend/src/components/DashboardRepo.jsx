@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Graph from '../components/Graph';
-import styled, { keyframes } from 'styled-components';
+import styled from 'styled-components';
 
 const DashboardRepo = () => {
   const [structure, setStructure] = useState(null);
@@ -63,12 +63,6 @@ const DashboardRepo = () => {
 export default DashboardRepo;
 
 /* --- СТИЛИ --- */
-
-const fade = keyframes`
-  0% { opacity: 0.2; }
-  50% { opacity: 0.6; }
-  100% { opacity: 0.2; }
-`;
 
 const Page = styled.div`
   padding: 2rem;

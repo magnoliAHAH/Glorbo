@@ -236,7 +236,6 @@ const DashboardForMain = () => {
 
     const [contextMenu, setContextMenu] = useState(null);
 
-    const location = useLocation();
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
 
@@ -308,8 +307,7 @@ const DashboardForMain = () => {
                 setNodes([]);
             })
             .finally(() => setLoading(false));
-    }, [currentRepoUrl, navigate, currentProjectId]); // Добавили currentProjectId в зависимости
-
+    }, [currentRepoUrl, navigate, currentProjectId, setNodes, setEdges]);
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
         console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type); // ДОБАВЛЕНО ЛОГИРОВАНИЕ ТИПА
@@ -477,11 +475,6 @@ const DashboardForMain = () => {
 export default DashboardForMain;
 
 // --- STYLES ---
-const fade = keyframes`
-  0% { opacity: 0.2; }
-  50% { opacity: 0.6; }
-  100% { opacity: 0.2; }
-`;
 
 const Page = styled.div`
   display: flex;
