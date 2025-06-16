@@ -159,6 +159,7 @@ func main() {
 		WithAuth(http.HandlerFunc(handleCreateAuthService)),
 	).Methods("POST", "OPTIONS")
 
+	router.Handle("/api/projects/{project_id}/services", WithAuth(http.HandlerFunc(handleGetServicesByProjectID))).Methods("GET", "OPTIONS")
 	// Маршруты для получения пользователей проекта
 	router.Handle(
 		"/api/projects/{project_id}/users",
@@ -591,6 +592,48 @@ func getServicesByProjectID(projectID int64) ([]Service, error) {
 		services = append(services, s)
 	}
 	return services, nil
+}
+
+func handleGetServicesByProjectID(w http.ResponseWriter, r *http.Request) {
+	requestsTotal.WithLabelValues(r.URL.Path, r.Method).Inc() // Метрика Prometheus
+
+	// Устанавливаем CORS заголовки (если не используете middleware для этого)
+	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Замените на домен вашего фронтенда
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+	// Обработка OPTIONS запросов (preflight)
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Извлекаем project_id из переменных URL
+	vars := mux.Vars(r)
+	projectIDStr, ok := vars["project_id"]
+	if !ok {
+		http.Error(w, "Project ID не указан", http.StatusBadRequest)
+		return
+	}
+
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Неверный формат Project ID", http.StatusBadRequest)
+		return
+	}
+
+	// Получаем services из базы данных
+	services, err := getServicesByProjectID(projectID)
+	if err != nil {
+		log.Printf("Error getting services for project %d: %v", projectID, err)
+		http.Error(w, "Ошибка сервера при получении сервисов", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем JSON-ответ
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(services)
 }
 
 // generateSecret генерирует случайную строку для секрета
