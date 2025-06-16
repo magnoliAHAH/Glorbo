@@ -378,20 +378,22 @@ const DashboardForMain = () => {
 
     const handleDeleteNode = useCallback(async (serviceId, projectId) => {
         try {
-            console.log(`Попытка удалить сервис ${serviceId} из проекта ${projectId}`);
-            await deleteService(serviceId, projectId);
-            alert(`Сервис ${serviceId} успешно удален.`);
-            console.log(`Сервис ${serviceId} успешно удален.`);
-
-            // Удаляем узел из React Flow
-            setNodes((prevNodes) => prevNodes.filter((node) => node.id !== serviceId));
-            setIsSidebarOpen(false); // Закрываем сайдбар после удаления
-            setSidebarContent(null); // Очищаем содержимое сайдбара
+          console.log(`Попытка удалить сервис ${serviceId} из проекта ${projectId}`);
+          await deleteService(serviceId, projectId);
+          alert(`Сервис ${serviceId} успешно удален.`);
+          console.log(`Сервис ${serviceId} успешно удален.`);
+      
+          // Удаляем узел из React Flow: любой узел с нужным id
+          setNodes((prev) =>
+            prev.filter((node) => node.id !== serviceId)
+          );
+          setIsSidebarOpen(false);
+          setSidebarContent(null);
         } catch (error) {
-            console.error(`Не удалось удалить сервис ${serviceId}:`, error.message);
-            alert(`Не удалось удалить сервис ${serviceId}: ${error.message}`);
+          console.error(`Не удалось удалить сервис ${serviceId}:`, error.message);
+          alert(`Не удалось удалить сервис ${serviceId}: ${error.message}`);
         }
-    }, [setNodes]);
+      }, [setNodes]);
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
