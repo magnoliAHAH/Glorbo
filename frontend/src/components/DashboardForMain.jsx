@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import {useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import styled, { keyframes } from 'styled-components';
 import ReactFlow, {
     MiniMap,
@@ -13,7 +13,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService } from '../functions/api/api';
+// !!! ИЗМЕНЕНИЕ: Добавил getProjectServices
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -41,7 +42,7 @@ const ContextMenuItem = styled.div`
     }
 `;
 
-// --- Custom Nodes for React Flow --- (без изменений)
+// --- Custom Nodes for React Flow ---
 const StyledNode = styled.div`
     padding: 10px 15px;
     border-radius: 5px;
@@ -95,6 +96,23 @@ const ServiceNodeContainer = styled(StyledNode)`
     font-size: 0.9em;
 `;
 
+// Добавлены стили для узлов файлов и папок
+const FileNodeContainer = styled(StyledNode)`
+    background-color: #ffffff;
+    border-color: #e0e0e0;
+    color: #424242;
+    font-size: 0.8em;
+    padding: 8px 12px;
+`;
+
+const FolderNodeContainer = styled(StyledNode)`
+    background-color: #f5f5f5;
+    border-color: #bdbdbd;
+    color: #424242;
+    font-size: 0.9em;
+    padding: 10px 15px;
+`;
+
 const RepoNode = ({ data }) => (
     <RepoNodeContainer>
         📦 {data.name || 'Repository'}
@@ -107,9 +125,24 @@ const ServiceNode = ({ data }) => (
     </ServiceNodeContainer>
 );
 
+// New: FileNode and FolderNode for displaying repo structure
+const FileNode = ({ data }) => (
+    <FileNodeContainer>
+        📄 {data.name}
+    </FileNodeContainer>
+);
+
+const FolderNode = ({ data }) => (
+    <FolderNodeContainer>
+        📁 {data.name}
+    </FolderNodeContainer>
+);
+
 const nodeTypes = {
     repoNode: RepoNode,
     serviceNode: ServiceNode,
+    fileNode: FileNode,   // Add new node types
+    folderNode: FolderNode, // Add new node types
 };
 
 // --- Sidebar Components ---
@@ -122,11 +155,10 @@ const SidebarWrapper = styled.div`
     display: flex;
     flex-direction: column;
     z-index: 999;
-    /* !!! ИЗМЕНЕНИЕ: Позиционирование сайдбара */
-    position: absolute; /* Делаем его абсолютно позиционированным */
-    right: 0;           /* Прикрепляем к правой стороне */
-    top: 0;             /* Прикрепляем к верху */
-    bottom: 0;          /* Растягиваем на всю высоту */
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
 `;
 
 const SidebarHeader = styled.div`
@@ -181,17 +213,27 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
     return (
         <SidebarWrapper isOpen={isOpen}>
             <SidebarHeader>
-                <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
+                <h3>
+                    {content?.type === 'repo' ? 'Repository Structure' :
+                     content?.type === 'serviceNode' ? 'Service Details' :
+                     (content?.type === 'fileNode' || content?.type === 'folderNode') ? 'Node Details' :
+                     'Details'}
+                </h3>
                 <CloseButton onClick={onClose}>X</CloseButton>
             </SidebarHeader>
             <SidebarContent>
                 {content ? (
                     content.type === 'repo' ? (
-                        // !!! ИЗМЕНЕНИЕ: Убедимся, что renderFileNodeForSidebar правильно обрабатывает URL
-                        // content уже содержит URL, переданный из DashboardForMain.jsx
                         renderFileNodeForSidebar(content)
-                    ) : (
+                    ) : content.type === 'serviceNode' ? (
                         renderServiceInfoForSidebar(content)
+                    ) : (
+                        // For file/folder nodes, simply display their name and type
+                        <div>
+                            <h4>Name: {content.name}</h4>
+                            <p>Type: {content.type}</p>
+                            {content.path && <p>Path: {content.path}</p>}
+                        </div>
                     )
                 ) : (
                     <p>Select a node to view its details.</p>
@@ -202,7 +244,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
 };
 
 
-// --- Context Menu Component --- (без изменений)
+// --- Context Menu Component ---
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
     const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'authentication', 'nginx', 'message-queue'];
 
@@ -218,7 +260,6 @@ const ContextMenu = ({ x, y, onCreateService, onClose }) => {
 };
 
 
-// --- Main Dashboard Component ---
 
 const DashboardForMain = () => {
     const [structure, setStructure] = useState(null);
@@ -239,13 +280,11 @@ const DashboardForMain = () => {
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
 
-    // !!! ИЗМЕНЕНИЕ 1: useEffect для чтения projectId из localStorage
-    // Убедимся, что projectId установлен перед загрузкой repoTree
+    // useEffect для чтения projectId из localStorage
     useEffect(() => {
         const storedProjectId = localStorage.getItem('projectId');
         if (storedProjectId) {
             const parsedProjectId = Number(storedProjectId);
-            // Убедимся, что projectId является валидным положительным числом
             if (!isNaN(parsedProjectId) && parsedProjectId > 0) {
                 setCurrentProjectId(parsedProjectId);
             } else {
@@ -258,67 +297,101 @@ const DashboardForMain = () => {
         }
     }, [navigate]);
 
-    // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
+    // Загрузка структуры репозитория и сервисов
     useEffect(() => {
         if (!currentRepoUrl) {
             navigate('/projects');
             return;
         }
-        // Ждем, пока currentProjectId будет установлен и валиден
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-            console.log('Waiting for valid currentProjectId to load repo tree. Current:', currentProjectId);
+            console.log('Waiting for valid currentProjectId to load data. Current:', currentProjectId);
             return;
         }
 
         setLoading(true);
         setError(null);
 
-        getRepoTree(currentRepoUrl)
-            .then(fetchedStructure => {
-                console.log('Fetched structure:', fetchedStructure);
-                setStructure(fetchedStructure);
+        Promise.all([
+            getRepoTree(currentRepoUrl),
+            getProjectServices(currentProjectId) // !!! Загружаем сервисы проекта
+        ])
+        .then(([fetchedStructure, fetchedServices]) => {
+            console.log('Fetched structure:', fetchedStructure);
+            console.log('Fetched services:', fetchedServices);
+            setStructure(fetchedStructure);
 
-                const repoNodeId = fetchedStructure.id;
-                const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
+            const initialNodes = [];
+            const initialEdges = [];
 
-                const initialNodes = [{
+            // 1. Добавляем корневой узел репозитория (БЕЗ ИЗМЕНЕНИЙ В ЭТОЙ ЧАСТИ)
+            const repoNodeId = fetchedStructure.id;
+            const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
+            const initialRepoNode = {
+                id: repoNodeId,
+                position: { x: 50, y: 50 }, // Фиксированная начальная позиция для репозитория
+                type: 'repoNode',
+                data: {
                     id: repoNodeId,
-                    position: { x: 50, y: 50 },
-                    type: 'repoNode',
-                    data: {
-                        id: repoNodeId,
-                        name: repoNodeName,
-                        type: 'repo',
-                        URL: currentRepoUrl,
-                        projectId: currentProjectId, // Используем projectId из состояния
-                    },
-                    draggable: true,
-                }];
+                    name: repoNodeName,
+                    type: 'repo',
+                    URL: currentRepoUrl,
+                    projectId: currentProjectId,
+                },
+                draggable: true,
+            };
+            initialNodes.push(initialRepoNode);
 
-                const { nodes: serviceNodes } = convertFileNodeToReactFlowElements(fetchedStructure);
-                const existingServiceNodes = serviceNodes.filter(n => n.type === 'serviceNode');
+            // 2. Добавляем узлы файлов/папок из структуры репозитория (БЕЗ ИЗМЕНЕНИЙ В ЭТОЙ ЧАСТИ)
+            const fileFolderOffset = { x: 300, y: 0 }; // Смещение для узлов файлов/папок
+            const { nodes: convertedFileNodes, edges: convertedFileEdges } =
+                convertFileNodeToReactFlowElements(fetchedStructure, null, 0, 0, fileFolderOffset);
+            
+            // Фильтруем любые дубликаты repoNode, если convertFileNodeToReactFlowElements их генерирует
+            const filteredConvertedFileNodes = convertedFileNodes.filter(node => node.id !== repoNodeId);
+            initialNodes.push(...filteredConvertedFileNodes);
+            initialEdges.push(...convertedFileEdges);
 
-                setNodes([...initialNodes, ...existingServiceNodes]);
-                setEdges([]);
-            })
-            .catch(err => {
-                console.error('Error fetching structure:', err);
-                setError(err.message);
-                setNodes([]);
-            })
-            .finally(() => setLoading(false));
+
+            // 3. Добавляем узлы сервисов из базы данных, ПЕРЕЗАПИСЫВАЯ любые узлы сервисов,
+            // которые могли быть сгенерированы из файловой структуры, чтобы использовать сохраненные позиции.
+            const finalNodesMap = new Map(initialNodes.map(node => [node.id, node]));
+
+            fetchedServices.forEach(service => {
+                const serviceNode = createReactFlowServiceNode(
+                    service.id,
+                    service.serviceType,
+                    service.position || { x: Math.random() * 500 + 100, y: Math.random() * 500 + 100 }, // Используем сохраненную позицию или случайную
+                    service.name || `${service.serviceType}-service`,
+                    currentProjectId
+                );
+                // Добавляем или перезаписываем существующие узлы сервисными узлами из базы данных
+                finalNodesMap.set(serviceNode.id, serviceNode);
+            });
+
+            setNodes(Array.from(finalNodesMap.values())); // Преобразуем Map обратно в массив
+            setEdges(initialEdges); // Устанавливаем все ребра, включая те, что могли быть сгенерированы для файлов/папок
+
+        })
+        .catch(err => {
+            console.error('Error fetching data:', err);
+            setError(err.message);
+            setNodes([]);
+            setEdges([]);
+        })
+        .finally(() => setLoading(false));
     }, [currentRepoUrl, navigate, currentProjectId, setNodes, setEdges]);
+
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
-        console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type); // ДОБАВЛЕНО ЛОГИРОВАНИЕ ТИПА
+        console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type);
     
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
             console.warn('Cannot update node position: currentProjectId is not valid. Not sending update.');
             return;
         }
     
-        // !!! ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем только для SERVICE NODES !!!
-        if (node.type === 'serviceNode') { // <--- ИЗМЕНЕНО С "repoNode || serviceNode"
+        // Отправляем только для SERVICE NODES
+        if (node.type === 'serviceNode') {
             try {
                 console.log(`Attempting to update position for service node ${node.id} to {x: ${node.position.x}, y: ${node.position.y}} in project ${currentProjectId}`);
                 await updateNodePosition(node.id, node.position, currentProjectId);
@@ -329,9 +402,6 @@ const DashboardForMain = () => {
             }
         } else {
             console.log(`Node type ${node.type} is not a service node. Position not saved.`);
-            // Если вы хотите сохранять позиции repoNode,
-            // вам потребуется отдельная таблица/поле в таблице 'projects'
-            // и отдельный API-эндпоинт для этого.
         }
     }, [currentProjectId]);
 
@@ -344,7 +414,8 @@ const DashboardForMain = () => {
         } else if (node.type === 'serviceNode') {
             setSidebarContent({ type: 'serviceNode', ...node.data });
         } else {
-            setSidebarContent(null);
+            // Для обычных файлов/папок, отображаем их данные
+            setSidebarContent(node.data); 
             console.log('Clicked non-special node:', node);
         }
     }, [structure, currentProjectId]);
@@ -381,7 +452,7 @@ const DashboardForMain = () => {
                 console.log('Created Auth Service:', result);
 
                 const newAuthServiceNode = createReactFlowServiceNode(
-                    `auth-${result.authServiceId}`,
+                    result.authServiceId, // ID сервиса
                     'authentication',
                     position,
                     appName,
@@ -395,7 +466,7 @@ const DashboardForMain = () => {
                 console.log('Created Service:', result);
 
                 const newNode = createReactFlowServiceNode(
-                    result.serviceId,
+                    result.serviceId, // ID сервиса
                     serviceType,
                     position,
                     result.name || `${serviceType}-service`,
@@ -414,6 +485,7 @@ const DashboardForMain = () => {
     const handleChangeRepo = () => {
         localStorage.removeItem('repo');
         localStorage.removeItem('projectId');
+        localStorage.removeItem('projectName');
         navigate('/projects');
     };
 
