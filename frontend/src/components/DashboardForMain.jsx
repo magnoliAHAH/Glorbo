@@ -13,7 +13,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService, getServicesList } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -221,6 +221,7 @@ const ContextMenu = ({ x, y, onCreateService, onClose }) => {
 // --- Main Dashboard Component ---
 
 const DashboardForMain = () => {
+    const [structure, setStructure] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -260,67 +261,70 @@ const DashboardForMain = () => {
     // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
     useEffect(() => {
         if (!currentRepoUrl) {
-          navigate('/projects');
-          return;
+            navigate('/projects');
+            return;
         }
+        // Ждем, пока currentProjectId будет установлен и валиден
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-          console.log('Waiting for valid currentProjectId. Current:', currentProjectId);
-          return;
+            console.log('Waiting for valid currentProjectId to load repo tree. Current:', currentProjectId);
+            return;
         }
-      
+
         setLoading(true);
         setError(null);
-      
-        Promise.all([
-          getRepoTree(currentRepoUrl),
-          getServicesList(currentProjectId),
-        ])
-          .then(([fetchedStructure, services]) => {
-            // --- Repo Node ---
-            const repoNode = {
-              id: fetchedStructure.id,
-              type: 'repoNode',
-              position: { x: 50, y: 50 },
-              data: {
-                id: fetchedStructure.id,
-                name: fetchedStructure.name || currentRepoUrl.split('/').pop(),
-                type: 'repo',
-                URL: currentRepoUrl,
-                projectId: currentProjectId,
-              },
-              draggable: true,
-            };
-      
-            // --- File nodes & edges (из дерева) ---
-            const { nodes: fileNodes, edges: fileEdges } = convertFileNodeToReactFlowElements(fetchedStructure);
-      
-            // --- Service nodes (из API) ---
-            const serviceNodes = services.map(svc =>
-              createReactFlowServiceNode(
-                svc.id,
-                svc.type,
-                { x: svc.positionX, y: svc.positionY },
-                svc.name,
-                svc.projectId
-              )
-            );
-      
-            // --- Собираем всё вместе ---
-            setNodes([repoNode, ...fileNodes, ...serviceNodes]);
-            setEdges(fileEdges || []);
-          })
-          .catch(err => {
-            console.error('Error fetching dashboard data:', err);
-            setError(err.message || 'Unknown error');
-            setNodes([]);
-            setEdges([]);
-          })
-          .finally(() => {
-            setLoading(false);
-          });
-      }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges]);
-      
-      
+
+        getRepoTree(currentRepoUrl)
+            .then(fetchedStructure => {
+                console.log('Fetched structure:', fetchedStructure);
+                setStructure(fetchedStructure);
+
+                const repoNodeId = fetchedStructure.id;
+                const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
+
+                
+
+                const initialNodes = [
+                    {
+                      id: repoNodeId,
+                      position: { x: 50, y: 50 },
+                      type: 'repoNode',
+                      data: {
+                        id: repoNodeId,
+                        name: repoNodeName,
+                        type: 'repo',
+                        URL: currentRepoUrl,
+                        projectId: currentProjectId,
+                      },
+                      draggable: true,
+                    },
+                    {
+                      id: 'service-placeholder',            // уникальный id
+                      position: { x: 200, y: 100 },         // где рисовать
+                      type: 'serviceNode',                  // тип узла
+                      data: {
+                        serviceType: 'backend',             // любая категория
+                        id: 'service-placeholder',          // совпадает с id
+                        name: 'Placeholder Service',        // подпись на узле
+                        projectId: currentProjectId,
+                      },
+                      draggable: true,
+                    },
+                  ];
+                  setNodes(initialNodes);
+
+                const { nodes: serviceNodes } = convertFileNodeToReactFlowElements(fetchedStructure);
+                const existingServiceNodes = serviceNodes.filter(n => n.type === 'serviceNode');
+
+                setNodes([...initialNodes, ...existingServiceNodes]);
+                setEdges([]);
+            })
+            .catch(err => {
+                console.error('Error fetching structure:', err);
+                setError(err.message);
+                setNodes([]);
+            })
+            .finally(() => setLoading(false));
+    }, [currentRepoUrl, navigate, currentProjectId, setNodes, setEdges]);
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
         console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type); // ДОБАВЛЕНО ЛОГИРОВАНИЕ ТИПА
