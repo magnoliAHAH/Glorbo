@@ -153,6 +153,11 @@ func main() {
 	router.HandleFunc("/api/register", handleRegister).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/login", handleLogin).Methods("POST", "OPTIONS")
 
+	router.Handle(
+		"/api/projects/{project_id}/services/{service_id}",
+		WithAuth(http.HandlerFunc(handleDeleteService)),
+	).Methods("DELETE", "OPTIONS")
+
 	// Маршруты для специфичных сервисов авторизации (связанных с project_id)
 	router.Handle(
 		"/api/projects/{project_id}/auth-services",
@@ -1103,4 +1108,65 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	})
 
 	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+func handleDeleteService(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+
+	requestsTotal.WithLabelValues(r.URL.Path, r.Method).Inc()
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Проверка авторизации
+	raw := r.Context().Value(userIDKey)
+	if raw == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	vars := mux.Vars(r)
+	serviceID, ok1 := vars["service_id"]
+	projectIDStr, ok2 := vars["project_id"]
+
+	if !ok1 || !ok2 {
+		http.Error(w, "Missing project_id or service_id in URL", http.StatusBadRequest)
+		return
+	}
+
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "Invalid project ID format", http.StatusBadRequest)
+		return
+	}
+
+	// Удаляем сервис из БД, убедившись, что он принадлежит указанному проекту
+	result, err := db.Exec("DELETE FROM services WHERE id = $1 AND project_id = $2", serviceID, projectID)
+	if err != nil {
+		log.Printf("Error deleting service %s from project %d: %v", serviceID, projectID, err)
+		http.Error(w, "Failed to delete service", http.StatusInternalServerError)
+		return
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		log.Printf("Error checking affected rows for service deletion: %v", err)
+		http.Error(w, "Failed to confirm service deletion", http.StatusInternalServerError)
+		return
+	}
+
+	if rowsAffected == 0 {
+		http.Error(w, "Service not found in this project or already deleted", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Service deleted successfully",
+	})
 }
