@@ -191,6 +191,7 @@ export function renderServiceInfoForSidebar(serviceData) {
             {serviceData.volume && <p><strong>Volume:</strong> {serviceData.volume}</p>}
             {serviceData.projectId && <p><strong>Project ID:</strong> {serviceData.projectId}</p>} {/* Отображаем projectId */}
             {/* Добавьте больше полей по необходимости */}
+            
         </div>
     );
 }

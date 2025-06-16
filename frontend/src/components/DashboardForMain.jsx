@@ -13,7 +13,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -177,7 +177,20 @@ const SidebarContent = styled.div`
     }
 `;
 
-const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
+    const isServiceNode = content?.type === 'serviceNode';
+
+    const handleDeleteClick = () => {
+        // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
+        if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
+            // Опционально: добавить подтверждение пользователя перед удалением
+            if (window.confirm(`Вы уверены, что хотите удалить сервис "${content.name || content.id}"?`)) {
+                onDeleteNode(content.id, content.projectId);
+            }
+        } else {
+            console.warn('Attempted to delete a node that is not a serviceNode or is missing ID/ProjectID.', content);
+        }
+    };
     return (
         <SidebarWrapper isOpen={isOpen}>
             <SidebarHeader>
@@ -196,6 +209,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose }) => {
                 ) : (
                     <p>Select a node to view its details.</p>
                 )}
+                <DeleteButton onClick={handleDeleteClick}>Удалить сервис</DeleteButton>
             </SidebarContent>
         </SidebarWrapper>
     );
@@ -362,6 +376,23 @@ const DashboardForMain = () => {
         }
     }, [currentProjectId]);
 
+    const handleDeleteNode = useCallback(async (serviceId, projectId) => {
+        try {
+            console.log(`Попытка удалить сервис ${serviceId} из проекта ${projectId}`);
+            await deleteService(serviceId, projectId);
+            alert(`Сервис ${serviceId} успешно удален.`);
+            console.log(`Сервис ${serviceId} успешно удален.`);
+
+            // Удаляем узел из React Flow
+            setNodes((prevNodes) => prevNodes.filter((node) => node.id !== serviceId));
+            setIsSidebarOpen(false); // Закрываем сайдбар после удаления
+            setSidebarContent(null); // Очищаем содержимое сайдбара
+        } catch (error) {
+            console.error(`Не удалось удалить сервис ${serviceId}:`, error.message);
+            alert(`Не удалось удалить сервис ${serviceId}: ${error.message}`);
+        }
+    }, [setNodes]);
+
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
         setIsSidebarOpen(true);
@@ -494,6 +525,7 @@ const DashboardForMain = () => {
                 isOpen={isSidebarOpen}
                 content={sidebarContent}
                 onClose={() => setIsSidebarOpen(false)}
+                onDeleteNode={handleDeleteNode}
             />
         </Page>
     );
@@ -587,4 +619,26 @@ const GraphWrapper = styled.div`
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.1);
   overflow: hidden;
+`;
+const DeleteButton = styled.button`
+    background-color: #ef4444; /* Красный цвет */
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    font-weight: bold;
+    margin-top: 20px;
+    width: 100%;
+    transition: background-color 0.2s ease-in-out;
+
+    &:hover {
+        background-color: #dc2626; /* Темнее красный при наведении */
+    }
+
+    &:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+    }
 `;

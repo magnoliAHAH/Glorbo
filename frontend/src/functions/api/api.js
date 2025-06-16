@@ -119,3 +119,33 @@ export async function getServicesList(projectId) {
     }
 }
 
+export const deleteService = async (serviceId, projectId) => {
+    try {
+        if (!serviceId || typeof projectId !== 'number') {
+            throw new Error('Service ID and Project ID are required for deletion.');
+        }
+
+        // Формируем URL, включая serviceId и projectId в пути
+        const url = `${API_BASE_URL}/api/services/${serviceId}/projects/${projectId}`;
+
+        console.log(`Sending DELETE request to: ${url}`);
+
+        const response = await fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                // Если ваш бэкенд ожидает заголовок Authorization,
+                // убедитесь, что он также обрабатывается middleware (например, WithAuth)
+                // и что ваш фронтенд отправляет его (чаще всего через HTTP-куки,
+                // что обеспечивается 'credentials: "include"').
+            },
+            credentials: 'include', // Важно для отправки куки с JWT
+        });
+
+        return handleResponse(response);
+    } catch (error) {
+        console.error('Error deleting service:', error);
+        throw error; // Перебрасываем ошибку для дальнейшей обработки в UI
+    }
+};
+
