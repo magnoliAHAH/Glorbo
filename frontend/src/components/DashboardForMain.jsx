@@ -13,7 +13,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
