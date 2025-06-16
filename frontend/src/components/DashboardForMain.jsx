@@ -221,7 +221,6 @@ const ContextMenu = ({ x, y, onCreateService, onClose }) => {
 // --- Main Dashboard Component ---
 
 const DashboardForMain = () => {
-    const [structure, setStructure] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
