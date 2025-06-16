@@ -259,80 +259,80 @@ const DashboardForMain = () => {
     }, [navigate]);
 
     // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
-
-useEffect(() => {
-  if (!currentRepoUrl) {
-    navigate('/projects');
-    return;
-  }
-  if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-    console.log('Waiting for valid currentProjectId. Current:', currentProjectId);
-    return;
-  }
-
-  setLoading(true);
-  setError(null);
-
-  // Сначала получаем дерево, потом список сервисов
-  getRepoTree(currentRepoUrl)
-    .then(fetchedStructure => {
-      const repoNodeId = fetchedStructure.id;
-      const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
-
-      // 1) Создаем узел-репозиторий
-      const repoNode = {
-        id: repoNodeId,
-        type: 'repoNode',
-        position: { x: 50, y: 50 },
-        data: {
-          id: repoNodeId,
-          name: repoNodeName,
-          type: 'repo',
-          URL: currentRepoUrl,
-          projectId: currentProjectId,
-        },
-        draggable: true,
-      };
-
-      // 2) Параллельно запрашиваем узлы сервисов из вашего API
-      return Promise.all([
-        Promise.resolve(repoNode),
-        getProjectServices(currentProjectId),
-        Promise.resolve(convertFileNodeToReactFlowElements(fetchedStructure)),
-      ]);
-    })
-    .then(([repoNode, services, { nodes: fileNodes = [], edges: fileEdges = [] }]) => {
-      // 3) Превращаем каждый объект сервиса в узел ReactFlow
-      const serviceNodes = services.map(svc =>
-        createReactFlowServiceNode(
-          svc.id,
-          svc.type,
-          { x: svc.positionX, y: svc.positionY },
-          svc.name,
-          svc.projectId
-        )
-      );
-
-      // 4) Собираем итоговый массив узлов — репо + файлы (если надо) + сервисы
-      setNodes([repoNode, ...fileNodes, ...serviceNodes]);
-
-      // 5) Сбрасываем рёбра к тем, что пришли из дерева файлов
-      setEdges(fileEdges);
-    })
-    .catch(err => {
-      console.error('Error loading dashboard:', err);
-      setError(err.message || 'Unknown error');
-      setNodes([]);
-      setEdges([]);
-    })
-    .finally(() => setLoading(false));
-}, [
-  currentRepoUrl,
-  currentProjectId,
-  navigate,
-  setNodes,
-  setEdges
-]);
+    useEffect(() => {
+        if (!currentRepoUrl) {
+          navigate('/projects');
+          return;
+        }
+        if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+          console.log('Waiting for valid currentProjectId. Current:', currentProjectId);
+          return;
+        }
+      
+        setLoading(true);
+        setError(null);
+      
+        // Шаг 1: получить дерево репозитория
+        getRepoTree(currentRepoUrl)
+          .then(fetchedStructure => {
+            console.log('Fetched structure:', fetchedStructure);
+            setStructure(fetchedStructure);
+      
+            // Собираем узел репозитория
+            const repoNode = {
+              id: fetchedStructure.id,
+              position: { x: 50, y: 50 },
+              type: 'repoNode',
+              data: {
+                id: fetchedStructure.id,
+                name: fetchedStructure.name || currentRepoUrl.split('/').pop(),
+                type: 'repo',
+                URL: currentRepoUrl,
+                projectId: currentProjectId,
+              },
+              draggable: true,
+            };
+      
+            // Параллельно запрашиваем список сервисов
+            return Promise.all([
+              Promise.resolve(repoNode),
+              Promise.resolve(convertFileNodeToReactFlowElements(fetchedStructure)),
+              getProjectServices(currentProjectId)
+            ]);
+          })
+          .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
+            // Преобразуем сервисы из API в узлы
+            const serviceNodes = services.map(svc =>
+              createReactFlowServiceNode(
+                svc.id,
+                svc.type,
+                { x: svc.positionX, y: svc.positionY },
+                svc.name,
+                svc.projectId
+              )
+            );
+      
+            // Собираем итоговый набор узлов
+            setNodes([
+              repoNode,
+              ...fileNodes,
+              ...serviceNodes
+            ]);
+      
+            // Сбрасываем рёбра
+            setEdges(fileEdges);
+          })
+          .catch(err => {
+            console.error('Error fetching dashboard data:', err);
+            setError(err.message || 'Unknown error');
+            setNodes([]);
+            setEdges([]);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
+      }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges, setStructure]);
+      
 
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
