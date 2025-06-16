@@ -261,65 +261,66 @@ const DashboardForMain = () => {
     // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
     useEffect(() => {
         if (!currentRepoUrl) {
-            navigate('/projects');
-            return;
+          navigate('/projects');
+          return;
         }
-        // Ждем, пока currentProjectId будет установлен и валиден
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-            console.log('Waiting for valid currentProjectId to load repo tree. Current:', currentProjectId);
-            return;
+          console.log('Waiting for valid currentProjectId. Current:', currentProjectId);
+          return;
         }
-
+      
         setLoading(true);
         setError(null);
-
-        getRepoTree(currentRepoUrl)
-            .then(fetchedStructure => {
-                console.log('Fetched structure:', fetchedStructure);
-                setStructure(fetchedStructure);
-
-                const repoNodeId = fetchedStructure.id;
-                const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
-
-                
-
-                const initialNodes = [{
-                    id: repoNodeId,
-                    position: { x: 50, y: 50 },
-                    type: 'repoNode',
-                    data: {
-                        id: repoNodeId,
-                        name: repoNodeName,
-                        type: 'repo',
-                        URL: currentRepoUrl,
-                        projectId: currentProjectId, // Используем projectId из состояния
-                    },
-                    id: repoNodeId,
-                    position: { x: 150, y: 150 },
-                    type: 'serviceNode',
-                    data: {
-                        id: repoNodeId,
-                        name: repoNodeName,
-                        type: 'repo',
-                        URL: currentRepoUrl,
-                        projectId: currentProjectId, // Используем projectId из состояния
-                    },
-                    draggable: true,
-                }];
-
-                const { nodes: serviceNodes } = convertFileNodeToReactFlowElements(fetchedStructure);
-                const existingServiceNodes = serviceNodes.filter(n => n.type === 'serviceNode');
-
-                setNodes([...initialNodes, ...existingServiceNodes]);
-                setEdges([]);
-            })
-            .catch(err => {
-                console.error('Error fetching structure:', err);
-                setError(err.message);
-                setNodes([]);
-            })
-            .finally(() => setLoading(false));
-    }, [currentRepoUrl, navigate, currentProjectId, setNodes, setEdges]);
+      
+        Promise.all([
+          getRepoTree(currentRepoUrl),
+          // Предположим, что вы добавили в ../functions/api/api.js функцию getServicesList:
+          // export const getServicesList = (projectId) => fetch(`/api/projects/${projectId}/services`).then(res => res.json());
+          getServicesList(currentProjectId),
+        ])
+          .then(([fetchedStructure, services]) => {
+            // 1) Узел репозитория
+            const repoNode = {
+              id: fetchedStructure.id,
+              type: 'repoNode',
+              position: { x: 50, y: 50 },
+              data: {
+                id: fetchedStructure.id,
+                name: fetchedStructure.name || currentRepoUrl.split('/').pop(),
+                type: 'repo',
+                URL: currentRepoUrl,
+                projectId: currentProjectId,
+              },
+              draggable: true,
+            };
+      
+            // 2) У себя конвертируете дерево в узлы-файлы (если нужно)
+            const { nodes: fileNodes, edges: fileEdges } = convertFileNodeToReactFlowElements(fetchedStructure);
+      
+            // 3) Узлы из вашего API
+            const serviceNodes = services.map(svc => createReactFlowServiceNode(
+              svc.id,
+              svc.type,
+              { x: svc.positionX, y: svc.positionY },
+              svc.name,
+              svc.projectId
+            ));
+      
+            // 4) Собираем всё вместе
+            setNodes([repoNode, ...fileNodes, ...serviceNodes]);
+            setEdges(fileEdges || []);
+          })
+          .catch(err => {
+            console.error('Error fetching dashboard data:', err);
+            setError(err.message || 'Unknown error');
+            setNodes([]);
+            setEdges([]);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
+      }, [ currentRepoUrl, currentProjectId, navigate, setNodes, setEdges ]);
+      
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
         console.log('onNodeDragStop called for node:', node.id, 'with currentProjectId:', currentProjectId, 'and type:', node.type); // ДОБАВЛЕНО ЛОГИРОВАНИЕ ТИПА
