@@ -89,7 +89,7 @@ export async function createAuthService(projectId, appName) {
 
 export async function getProjectServices(projectId) {
     try {
-        const response = await fetch(`/api/projects/${parseInt(projectId, 10)}/services`, {
+        const response = await fetch(`${API_BASE_URL}/projects/${parseInt(projectId, 10)}/services`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -102,3 +102,20 @@ export async function getProjectServices(projectId) {
         throw error;
     }
 }
+
+export async function getServicesList(projectId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/projects/${parseInt(projectId, 10)}/services`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            credentials: 'include', // Важно для отправки JWT-токена
+        });
+        return handleResponse(response);
+    } catch (error) {
+        console.error(`Error fetching services for project ${projectId}:`, error);
+        throw error;
+    }
+}
+

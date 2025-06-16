@@ -13,7 +13,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getServicesList } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -274,12 +274,10 @@ const DashboardForMain = () => {
       
         Promise.all([
           getRepoTree(currentRepoUrl),
-          // Предположим, что вы добавили в ../functions/api/api.js функцию getServicesList:
-          // export const getServicesList = (projectId) => fetch(`/api/projects/${projectId}/services`).then(res => res.json());
           getServicesList(currentProjectId),
         ])
           .then(([fetchedStructure, services]) => {
-            // 1) Узел репозитория
+            // --- Repo Node ---
             const repoNode = {
               id: fetchedStructure.id,
               type: 'repoNode',
@@ -294,19 +292,21 @@ const DashboardForMain = () => {
               draggable: true,
             };
       
-            // 2) У себя конвертируете дерево в узлы-файлы (если нужно)
+            // --- File nodes & edges (из дерева) ---
             const { nodes: fileNodes, edges: fileEdges } = convertFileNodeToReactFlowElements(fetchedStructure);
       
-            // 3) Узлы из вашего API
-            const serviceNodes = services.map(svc => createReactFlowServiceNode(
-              svc.id,
-              svc.type,
-              { x: svc.positionX, y: svc.positionY },
-              svc.name,
-              svc.projectId
-            ));
+            // --- Service nodes (из API) ---
+            const serviceNodes = services.map(svc =>
+              createReactFlowServiceNode(
+                svc.id,
+                svc.type,
+                { x: svc.positionX, y: svc.positionY },
+                svc.name,
+                svc.projectId
+              )
+            );
       
-            // 4) Собираем всё вместе
+            // --- Собираем всё вместе ---
             setNodes([repoNode, ...fileNodes, ...serviceNodes]);
             setEdges(fileEdges || []);
           })
@@ -319,7 +319,8 @@ const DashboardForMain = () => {
           .finally(() => {
             setLoading(false);
           });
-      }, [ currentRepoUrl, currentProjectId, navigate, setNodes, setEdges ]);
+      }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges]);
+      
       
     // Обработчик перетаскивания узлов
     const onNodeDragStop = useCallback(async (event, node) => {
