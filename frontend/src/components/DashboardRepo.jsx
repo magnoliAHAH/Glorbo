@@ -44,7 +44,7 @@ const DashboardRepo = () => {
     <Page>
       <Header>
         <Title>📊 Dashboard проекта</Title>
-        <SwitchButton onClick={handleChangeRepo}>Сменить репозиторий</SwitchButton>
+        <SwitchButton onClick={handleChangeRepo}>Сменить репозиторий проекта</SwitchButton>
       </Header>
 
       <Content>
