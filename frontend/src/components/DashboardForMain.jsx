@@ -383,10 +383,9 @@ const DashboardForMain = () => {
           alert(`Сервис ${serviceId} успешно удален.`);
           console.log(`Сервис ${serviceId} успешно удален.`);
       
-          // Удаляем узел из React Flow: любой узел с нужным id
-          setNodes((prev) =>
-            prev.filter((node) => node.id !== serviceId)
-          );
+          // Удаляем из React Flow любой узел с этим id:
+          setNodes(prev => prev.filter(node => node.id !== serviceId));
+      
           setIsSidebarOpen(false);
           setSidebarContent(null);
         } catch (error) {
@@ -394,6 +393,7 @@ const DashboardForMain = () => {
           alert(`Не удалось удалить сервис ${serviceId}: ${error.message}`);
         }
       }, [setNodes]);
+      
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
