@@ -281,10 +281,22 @@ const DashboardForMain = () => {
                 const repoNodeId = fetchedStructure.id;
                 const repoNodeName = fetchedStructure.name || currentRepoUrl.split('/').pop();
 
+                
+
                 const initialNodes = [{
                     id: repoNodeId,
                     position: { x: 50, y: 50 },
                     type: 'repoNode',
+                    data: {
+                        id: repoNodeId,
+                        name: repoNodeName,
+                        type: 'repo',
+                        URL: currentRepoUrl,
+                        projectId: currentProjectId, // Используем projectId из состояния
+                    },
+                    id: repoNodeId,
+                    position: { x: 150, y: 150 },
+                    type: 'serviceNode',
                     data: {
                         id: repoNodeId,
                         name: repoNodeName,
