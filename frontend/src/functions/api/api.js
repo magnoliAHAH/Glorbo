@@ -126,7 +126,7 @@ export const deleteService = async (serviceId, projectId) => {
         }
 
         // Формируем URL, включая serviceId и projectId в пути
-        const url = `${API_BASE_URL}/api/services/${serviceId}/projects/${projectId}`;
+        const url = `${API_BASE_URL}/services/${serviceId}/projects/${projectId}`;
 
         console.log(`Sending DELETE request to: ${url}`);
 
