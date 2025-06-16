@@ -272,13 +272,10 @@ const DashboardForMain = () => {
         setLoading(true);
         setError(null);
       
-        // Шаг 1: получить дерево репозитория
         getRepoTree(currentRepoUrl)
           .then(fetchedStructure => {
-            console.log('Fetched structure:', fetchedStructure);
             setStructure(fetchedStructure);
       
-            // Собираем узел репозитория
             const repoNode = {
               id: fetchedStructure.id,
               position: { x: 50, y: 50 },
@@ -293,15 +290,12 @@ const DashboardForMain = () => {
               draggable: true,
             };
       
-            // Параллельно запрашиваем список сервисов
             return Promise.all([
               Promise.resolve(repoNode),
-              Promise.resolve(convertFileNodeToReactFlowElements(fetchedStructure)),
-              getProjectServices(currentProjectId)
+              getProjectServices(currentProjectId),
             ]);
           })
-          .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
-            // Преобразуем сервисы из API в узлы
+          .then(([repoNode, services]) => {
             const serviceNodes = services.map(svc =>
               createReactFlowServiceNode(
                 svc.id,
@@ -312,15 +306,13 @@ const DashboardForMain = () => {
               )
             );
       
-            // Собираем итоговый набор узлов
             setNodes([
               repoNode,
-              ...fileNodes,
               ...serviceNodes
             ]);
       
-            // Сбрасываем рёбра
-            setEdges(fileEdges);
+            // Убираем любые fileEdges:
+            setEdges([]);
           })
           .catch(err => {
             console.error('Error fetching dashboard data:', err);
@@ -332,6 +324,7 @@ const DashboardForMain = () => {
             setLoading(false);
           });
       }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges, setStructure]);
+      
       
 
     // Обработчик перетаскивания узлов
