@@ -131,13 +131,11 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, onConfirm, onCa
 
     const handleConfirm = () => {
         if (type === 'prompt') {
-            onConfirm && onConfirm(inputValue);
-            // Для prompt закрываем только через onClose
-            onClose && onClose();
-        } else {
-            onConfirm && onConfirm();
-            // Для alert/confirm закрываем через общий механизм
-            onCloseInternal();
+          onConfirm(inputValue);
+          onClose();        // закрываем здесь
+        } else { 
+          onConfirm();
+          onCloseInternal();
         }
     };
 
