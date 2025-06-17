@@ -526,12 +526,10 @@ const DashboardForMain = () => {
                     alert('Ошибка билда или деплоя: ' + err.message)
                   }
                 },
-                onCancel: () => setShowMessageBox(null),
-                onClose:  () => setShowMessageBox(null),
+                onCancel: () => setShowMessageBox(null)
               })
             },
-            onCancel: () => setShowMessageBox(null),
-            onClose:  () => setShowMessageBox(null),
+            onCancel: () => setShowMessageBox(null)
           })
           return
         }
