@@ -1381,8 +1381,8 @@ func handleCreatePod(w http.ResponseWriter, r *http.Request) {
 
 type TaskRequest struct {
 	ProjectID int64             `json:"project_id"`
-	TaskType  string            `json:"task_type"` // например: "build", "lint", "analyze"
-	Params    map[string]string `json:"params"`    // любые параметры
+	TaskType  string            `json:"task_type"`
+	Params    map[string]string `json:"params"`
 }
 
 func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
@@ -1396,7 +1396,43 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("User %s requested task: %s for project %d with params: %+v", userID, req.TaskType, req.ProjectID, req.Params)
 
-	// Пример: в зависимости от типа задачи — выполняем определённую команду
+	projectPath := fmt.Sprintf("/projects/%d", req.ProjectID)
+
+	// Проверяем, что repo_url передан
+	repoURL, ok := req.Params["repo_url"]
+	if !ok || repoURL == "" {
+		http.Error(w, "'repo_url' param is required", http.StatusBadRequest)
+		return
+	}
+
+	// Путь внутри репозитория (поддиректория с Dockerfile и кодом)
+	subPath := req.Params["path"]
+	if subPath == "" {
+		subPath = "." // если не указан — берем корень репы
+	}
+
+	fullPath := filepath.Join(projectPath, subPath)
+
+	// Клонируем репозиторий, если нет папки проекта
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		cloneCmd := exec.Command("git", "clone", repoURL, projectPath)
+		out, err := cloneCmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to clone repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Repo cloned to %s", projectPath)
+	} else {
+		// Если папка есть, обновим репозиторий (git fetch + reset)
+		updateCmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git fetch && git reset --hard origin/main", projectPath))
+		out, err := updateCmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to update repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			return
+		}
+		log.Printf("Repo updated at %s", projectPath)
+	}
+
 	switch req.TaskType {
 	case "build":
 		branch := req.Params["branch"]
@@ -1405,19 +1441,21 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("cd /projects/%d && git checkout %s && make build", req.ProjectID, branch))
+		cmdStr := fmt.Sprintf("cd %s && git checkout %s && git pull origin %s && make build", fullPath, branch, branch)
+		cmd := exec.Command("sh", "-c", cmdStr)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Build failed: %s", string(out)), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Build failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
 			return
 		}
 		w.Write([]byte(fmt.Sprintf("Build succeeded:\n%s", string(out))))
 
 	case "lint":
-		cmd := exec.Command("sh", "-c", fmt.Sprintf("cd /projects/%d && make lint", req.ProjectID))
+		cmdStr := fmt.Sprintf("cd %s && make lint", fullPath)
+		cmd := exec.Command("sh", "-c", cmdStr)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Lint failed: %s", string(out)), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Lint failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
 			return
 		}
 		w.Write([]byte(fmt.Sprintf("Lint passed:\n%s", string(out))))
