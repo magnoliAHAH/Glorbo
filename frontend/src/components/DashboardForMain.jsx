@@ -178,7 +178,7 @@ const SidebarContent = styled.div`
 `;
 
 const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
-    const isServiceNode = content?.type === 'serviceNode';
+    const isServiceNode = content?.type === 'serviceNode'|| content?.type === 'service';
 
     const handleDeleteClick = () => {
         // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
