@@ -1,26 +1,23 @@
-# Используем официальный образ Go
-FROM golang:1.24-alpine
+FROM node:18-alpine
 
-# Устанавливаем рабочую директорию в контейнере
+# Рабочая директория внутри контейнера
 WORKDIR /app
 
-RUN apk add --no-cache git ca-certificates
-# Копируем go.mod и go.sum для установки зависимостей
-COPY go.mod ./
+# Копируем package.json и lock-файл из подкаталога
+COPY frontend/package*.json ./
 
 # Устанавливаем зависимости
-RUN go mod download
+RUN npm install
 
-# Копируем все файлы проекта
-COPY . .
+# Копируем все файлы фронтенда
+COPY frontend/. ./
 
-COPY ./certs /app/certs
+# Собираем фронт
+RUN npm run build
 
-# Собираем приложение
-RUN go build -o main .
+# Используем nginx для отдачи статики
+FROM nginx:alpine
+COPY --from=0 /app/dist /usr/share/nginx/html
 
-# Открываем порт 8080
-EXPOSE 8080
-
-# Запускаем приложение
-CMD ["./main"]
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

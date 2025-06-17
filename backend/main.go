@@ -1441,8 +1441,8 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 								Name:  "kaniko",
 								Image: "gcr.io/kaniko-project/executor:latest",
 								Args: []string{
-									fmt.Sprintf("--context=git://%s#%s", strings.TrimPrefix(repoURL, "https://"), branch),
-									fmt.Sprintf("--dockerfile=%s/Dockerfile", strings.TrimPrefix(path, "/")),
+									fmt.Sprintf("--context=git://%s//%s#%s", strings.TrimPrefix(repoURL, "https://"), path, branch),
+									"--dockerfile=Dockerfile",
 									fmt.Sprintf("--destination=%s", fullImage),
 									"--insecure",
 									"--insecure-pull",
