@@ -447,69 +447,97 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 
-	requestsTotal.WithLabelValues("/api/create-service", r.Method).Inc()
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Проверка авторизации
+	// проверка auth …
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // userID не используется напрямую здесь, но может быть для доп. проверок
 
+	// парсим тело
 	var req struct {
-		ProjectID   int64     `json:"projectId"`   // Теперь ожидаем project_id напрямую
-		ServiceType string    `json:"serviceType"` // Тип сервиса (backend, redis, etc.)
-		Position    *Position `json:"position"`    // Желаемая позиция на канвасе
+		ProjectID   int64             `json:"projectId"`
+		ServiceType string            `json:"serviceType"`
+		Position    *Position         `json:"position,omitempty"`
+		Image       string            `json:"image"`         // добавляем поле image
+		Env         map[string]string `json:"env,omitempty"` // и env
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-
-	// Проверяем наличие необходимых полей
-	if req.ProjectID == 0 || req.ServiceType == "" {
-		http.Error(w, "projectId and serviceType are required", http.StatusBadRequest)
+	if req.ProjectID == 0 || req.ServiceType == "" || req.Image == "" {
+		http.Error(w, "projectId, serviceType and image are required", http.StatusBadRequest)
 		return
 	}
 	if req.Position == nil {
-		req.Position = &Position{X: 0, Y: 0} // Устанавливаем дефолтную позицию, если не указана
+		req.Position = &Position{X: 0, Y: 0}
 	}
 
-	// Используем projectID напрямую из запроса
-	projectID := req.ProjectID
-
-	// Генерируем уникальный ID для нового сервиса
+	// генерируем ID и имя
 	serviceID := generateUUID()
-	serviceName := fmt.Sprintf("%s-service-%s", req.ServiceType, serviceID[:4]) // Пример имени сервиса
-	// Определяем путь для сервиса. Это может быть подпапка с именем типа сервиса,
-	// или просто корень репозитория, если это "главный" сервис.
-	// Пока что просто используем тип сервиса в нижнем регистре.
+	serviceName := fmt.Sprintf("%s-service-%s", req.ServiceType, serviceID[:4])
 	servicePath := strings.ToLower(req.ServiceType)
 
-	// Вставляем новый сервис в БД
+	// записываем в БД
 	_, err := db.Exec(`
-		INSERT INTO services (id, project_id, name, type, status, volume, version, path, position_x, position_y)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, serviceID, projectID, serviceName, req.ServiceType, "pending", "", "", servicePath, req.Position.X, req.Position.Y)
-
+        INSERT INTO services
+          (id, project_id, name, type, status, volume, version, path, position_x, position_y)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		serviceID, req.ProjectID, serviceName, req.ServiceType,
+		"pending", "", "", servicePath,
+		req.Position.X, req.Position.Y,
+	)
 	if err != nil {
-		log.Printf("Failed to create service in DB: %v", err)
-		http.Error(w, fmt.Sprintf("Failed to create service: %v", err), http.StatusInternalServerError)
+		log.Printf("DB insert failed: %v", err)
+		http.Error(w, "DB error", http.StatusInternalServerError)
 		return
 	}
 
+	// --- здесь создаём Pod в k8s ---
+	clientset, err := initK8sClient()
+	if err != nil {
+		log.Printf("k8s init client: %v", err)
+		// не фатально — просто логируем и продолжаем
+	} else {
+		pod := &v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      serviceName,
+				Namespace: "glorbo-app", // можно взять из req.Namespace, если добавите
+				Labels:    map[string]string{"app": req.ServiceType},
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name:  serviceName,
+						Image: req.Image,
+						Env:   mapToEnvVars(req.Env),
+					},
+				},
+				RestartPolicy: v1.RestartPolicyAlways,
+			},
+		}
+		if _, err := clientset.CoreV1().
+			Pods("glorbo-app").
+			Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
+
+			log.Printf("Failed to create Pod %s: %v", serviceName, err)
+		}
+	}
+
+	// возвращаем ответ
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message":   "Service created successfully",
+		"message":   "Service created and pod launched",
 		"serviceId": serviceID,
-		"name":      serviceName, // Отдаем имя обратно, чтобы фронтенд мог его использовать
+		"name":      serviceName,
 	})
 }
 
