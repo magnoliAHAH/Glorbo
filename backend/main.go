@@ -1412,10 +1412,13 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Создаем клиент Kubernetes (предполагается, что сервис запущен внутри кластера)
+		jobName := fmt.Sprintf("kaniko-build-%d-%d", req.ProjectID, time.Now().Unix())
+		fullImage := fmt.Sprintf("registry.registry.svc.cluster.local:5000/%s:%s", imageName, tag)
+
+		// Создаем Kubernetes client
 		config, err := rest.InClusterConfig()
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get Kubernetes in-cluster config: %v", err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to get Kubernetes config: %v", err), http.StatusInternalServerError)
 			return
 		}
 		clientset, err := kubernetes.NewForConfig(config)
@@ -1424,8 +1427,9 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		jobName := fmt.Sprintf("kaniko-build-%d-%d", req.ProjectID, time.Now().Unix())
-		fullImage := fmt.Sprintf("registry.registry.svc.cluster.local:5000/%s:%s", imageName, tag)
+		// Git volume mount path (общий путь в init-контейнере и основном контейнере)
+		sharedVolumeName := "build-source"
+		sharedVolumePath := "/workspace"
 
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1436,17 +1440,47 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
 						RestartPolicy: corev1.RestartPolicyNever,
+						InitContainers: []corev1.Container{
+							{
+								Name:    "clone-repo",
+								Image:   "alpine/git",
+								Command: []string{"sh", "-c"},
+								Args: []string{
+									fmt.Sprintf("git clone --depth 1 --branch %s %s %s && ls -la %s", branch, repoURL, sharedVolumePath, sharedVolumePath),
+								},
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      sharedVolumeName,
+										MountPath: sharedVolumePath,
+									},
+								},
+							},
+						},
 						Containers: []corev1.Container{
 							{
 								Name:  "kaniko",
 								Image: "gcr.io/kaniko-project/executor:latest",
 								Args: []string{
-									fmt.Sprintf("--context=git://%s//%s#%s", strings.TrimPrefix(repoURL, "https://"), path, branch),
+									fmt.Sprintf("--context=%s/%s", sharedVolumePath, path),
 									"--dockerfile=Dockerfile",
 									fmt.Sprintf("--destination=%s", fullImage),
 									"--insecure",
 									"--insecure-pull",
 									"--insecure-registry=registry.registry.svc.cluster.local:5000",
+								},
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      sharedVolumeName,
+										MountPath: sharedVolumePath,
+									},
+								},
+							},
+						},
+						Volumes: []corev1.Volume{
+							{
+								Name: sharedVolumeName,
+								VolumeSource: corev1.VolumeSource{
+									EmptyDir: &corev1.EmptyDirVolumeSource{},
 								},
 							},
 						},
@@ -1455,7 +1489,6 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 
-		// Создаем Job в namespace default (замени на нужный, если нужно)
 		_, err = clientset.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create Kaniko build job: %v", err), http.StatusInternalServerError)
