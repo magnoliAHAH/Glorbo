@@ -433,7 +433,7 @@ const DashboardForMain = () => {
                 message: 'ID проекта не найден или недействителен. Невозможно создать сервис.',
                 onClose: () => {
                     setShowMessageBox(null);
-                    setContextMenu(null); // Close context menu
+                    setContextMenu(null);
                 }
             });
             console.error('Project ID is invalid for service creation:', currentProjectId);
@@ -442,102 +442,73 @@ const DashboardForMain = () => {
 
         const position = { x: contextMenu.x, y: contextMenu.y };
 
-        try {
-            if (serviceType === 'authentication') {
-                // Use MessageBox as 'prompt' to get the appName
-                setShowMessageBox({
-                    isOpen: true,
-                    type: 'prompt',
-                    title: 'Имя службы аутентификации',
-                    message: 'Введите имя для службы аутентификации (например, "Google Auth", "Auth0"):',
-                    placeholder: 'Имя службы',
-                    onConfirm: async (appName) => {
-                        setShowMessageBox(null); // Close prompt box immediately
-                        if (!appName || !appName.trim()) {
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Ошибка ввода',
-                                message: 'Имя службы аутентификации не может быть пустым.',
-                                onClose: () => setShowMessageBox(null)
-                            });
-                            return;
-                        }
-                        try {
-                            const result = await createAuthService(currentProjectId, appName.trim());
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Сервис создан',
-                                message: `Служба аутентификации "${appName.trim()}" создана с ID: ${result.authServiceId}`,
-                                onClose: () => setShowMessageBox(null)
-                            });
-                            console.log('Created Auth Service:', result);
+        // Закрываем контекстное меню сразу после выбора типа сервиса
+        setContextMenu(null);
 
-                            const newAuthServiceNode = createReactFlowServiceNode(
-                                `auth-${result.authServiceId}`,
-                                'authentication',
-                                position,
-                                appName.trim(),
-                                currentProjectId
-                            );
-                            setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
-                        } catch (error) {
-                            console.error('Не удалось создать службу аутентификации:', error.message);
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Ошибка создания',
-                                message: `Не удалось создать службу аутентификации: ${error.message}`,
-                                onClose: () => setShowMessageBox(null)
-                            });
-                        } finally {
-                            setContextMenu(null); // Ensure context menu is closed after all operations
-                        }
-                    },
-                    onCancel: () => {
-                        setShowMessageBox(null); // Close prompt box if cancelled
-                        setContextMenu(null); // Close context menu if prompt is cancelled
+        setShowMessageBox({
+            isOpen: true,
+            type: 'prompt', // Используем 'prompt' для всех типов сервисов
+            title: `Создать ${serviceType} сервис`,
+            message: `Введите имя для нового ${serviceType} сервиса:`,
+            placeholder: `Имя ${serviceType} сервиса (необязательно)`,
+            onConfirm: async (appName = '') => { // appName теперь может быть пустым
+                setShowMessageBox(null); // Закрываем MessageBox
+
+                const trimmedAppName = appName.trim();
+
+                // Специальная проверка для authentication: имя обязательно
+                if (serviceType === 'authentication' && !trimmedAppName) {
+                    setShowMessageBox({
+                        isOpen: true,
+                        type: 'alert',
+                        title: 'Ошибка ввода',
+                        message: 'Имя службы аутентификации не может быть пустым.',
+                        onClose: () => setShowMessageBox(null)
+                    });
+                    return;
+                }
+
+                try {
+                    let result;
+                    if (serviceType === 'authentication') {
+                        result = await createAuthService(currentProjectId, trimmedAppName);
+                    } else {
+                        result = await createService(currentProjectId, serviceType, position);
                     }
-                });
 
-            } else {
-                // For non-authentication services, proceed directly as no name prompt is needed
-                const result = await createService(currentProjectId, serviceType, position);
-                setShowMessageBox({
-                    isOpen: true,
-                    type: 'alert',
-                    title: 'Сервис создан',
-                    message: `Сервис создан: ${result.serviceId}`,
-                    onClose: () => setShowMessageBox(null)
-                });
-                console.log('Created Service:', result);
+                    setShowMessageBox({
+                        isOpen: true,
+                        type: 'alert',
+                        title: 'Сервис создан',
+                        message: `Сервис "${trimmedAppName || (result.name || `${serviceType}-service`)}" создан с ID: ${result.serviceId || result.authServiceId}.`,
+                        onClose: () => setShowMessageBox(null)
+                    });
+                    console.log('Создан сервис:', result);
 
-                const newNode = createReactFlowServiceNode(
-                    result.serviceId,
-                    serviceType,
-                    position,
-                    result.name || `${serviceType}-service`,
-                    currentProjectId
-                );
-                setNodes((prevNodes) => [...prevNodes, newNode]);
+                    const newNode = createReactFlowServiceNode(
+                        result.serviceId || result.authServiceId, // Используем serviceId или authServiceId
+                        serviceType,
+                        position,
+                        trimmedAppName || (result.name || `${serviceType}-service`), // Используем введенное имя или имя из результата
+                        currentProjectId
+                    );
+                    setNodes((prevNodes) => [...prevNodes, newNode]);
+
+                } catch (error) {
+                    console.error('Не удалось создать сервис:', error.message);
+                    setShowMessageBox({
+                        isOpen: true,
+                        type: 'alert',
+                        title: 'Ошибка создания',
+                        message: `Не удалось создать сервис: ${error.message}`,
+                        onClose: () => setShowMessageBox(null)
+                    });
+                }
+            },
+            onCancel: () => {
+                setShowMessageBox(null); // Закрываем MessageBox при отмене
             }
-        } catch (error) {
-            // This catch block will primarily handle errors from createService for non-auth types
-            // and possibly other unexpected errors. Auth service errors are handled inside its specific try/catchfd.
-            console.error('Failed to create service:', error.message);
-            setShowMessageBox({
-                isOpen: true,
-                type: 'alert',
-                title: 'Ошибка создания',
-                message: `Не удалось создать сервис: ${error.message}`,
-                onClose: () => setShowMessageBox(null)
-            });
-        } finally {
-            // Note: setContextMenu(null) might be called twice if auth service is handled.
-            // This is generally harmless, but ensures it closes.
-            setContextMenu(null);
-        }
+        });
     }, [currentProjectId, contextMenu, setNodes]);
 
     const handleChangeRepo = () => {
