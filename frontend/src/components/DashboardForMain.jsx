@@ -405,7 +405,21 @@ const DashboardForMain = () => {
         setIsSidebarOpen(true);
 
         if (node.type === 'repoNode' && structure) {
-            setSidebarContent({ type: 'repo', ...structure, projectId: currentProjectId, URL: node.data.URL });
+            // Создаем нормализованную копию structure, чтобы безопасно передать в sidebar
+            const normalizedStructure = { ...structure };
+
+            // Проверяем и нормализуем `projectId` (в нижнем регистре, как в JSON)
+            if (normalizedStructure.projectId && typeof normalizedStructure.projectId === 'object' &&
+                'Int64' in normalizedStructure.projectId && 'Valid' in normalizedStructure.projectId) {
+                normalizedStructure.projectId = normalizedStructure.projectId.Valid ? normalizedStructure.projectId.Int64 : null;
+            }
+            // Также проверяем и нормализуем `ProjectID` (с заглавной буквы, если JSON поле соответствует имени Go-структуры)
+            if (normalizedStructure.ProjectID && typeof normalizedStructure.ProjectID === 'object' &&
+                'Int64' in normalizedStructure.ProjectID && 'Valid' in normalizedStructure.ProjectID) {
+                normalizedStructure.ProjectID = normalizedStructure.ProjectID.Valid ? normalizedStructure.ProjectID.Int64 : null;
+            }
+
+            setSidebarContent({ type: 'repo', ...normalizedStructure, URL: node.data.URL });
         } else if (node.type === 'serviceNode') {
             setSidebarContent({ type: 'serviceNode', ...node.data });
         } else {
