@@ -464,7 +464,7 @@ const DashboardForMain = () => {
         console.log('🟡 Начинаем создание', serviceType, '-сервиса...');
       
         if (serviceType === 'frontend') {
-          let buildParams;
+          let buildParams = null;
       
           const askDeployParams = () => {
             setShowMessageBox({
@@ -472,7 +472,8 @@ const DashboardForMain = () => {
               type: 'prompt',
               title: 'Параметры деплоя (JSON)',
               message: 'Введите JSON с полями namespace, podName, containerPort, env, labels',
-              placeholder: `{"namespace":"default","podName":"my-pod","containerPort":80,"env":{},"labels":{"app":"frontend"}}`,
+              placeholder:
+                '{"namespace":"default","podName":"my-pod","containerPort":80,"env":{},"labels":{"app":"frontend"}}',
               onConfirm: async (deployJson) => {
                 let deployParams;
                 try {
@@ -528,13 +529,15 @@ const DashboardForMain = () => {
             });
           };
       
+          // Первый prompt - параметры сборки
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
             title: 'Параметры сборки (JSON)',
             message: 'Введите JSON с полями repo_url, branch, path, image_name, tag',
-            placeholder: `{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}`,
-            onConfirm: async (buildJson) => {
+            placeholder:
+              '{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}',
+            onConfirm: (buildJson) => {
               try {
                 buildParams = JSON.parse(buildJson);
                 console.log('✅ Параметры билда:', buildParams);
@@ -555,7 +558,7 @@ const DashboardForMain = () => {
           return;
         }
       
-        // ВСЕ ОСТАЛЬНЫЕ СЕРВИСЫ
+        // Остальные сервисы
         const position = { x: contextMenu.x, y: contextMenu.y };
         setContextMenu(null);
       
@@ -604,6 +607,7 @@ const DashboardForMain = () => {
         setContextMenu,
         setShowMessageBox,
       ]);
+      
       
       
       
