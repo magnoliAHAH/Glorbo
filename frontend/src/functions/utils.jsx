@@ -156,7 +156,7 @@ export function renderFileNodeForSidebar(node, depth = 0) {
                     {details}
                 </div>
             )}
-            {node.children && node.children.length > 0 && (
+            {Array.isArray(node.children) && node.children.length > 0 && (
                 <div style={{ paddingLeft: '10px' }}>
                     {node.children.map(child => renderFileNodeForSidebar(child, depth + 1))}
                 </div>
