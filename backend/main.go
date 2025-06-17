@@ -1396,83 +1396,67 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("User %s requested task: %s for project %d with params: %+v", userID, req.TaskType, req.ProjectID, req.Params)
 
-	projectPath := fmt.Sprintf("/projects/%d", req.ProjectID)
-
-	repoURL, ok := req.Params["repo_url"]
-	if !ok || repoURL == "" {
-		http.Error(w, "'repo_url' param is required", http.StatusBadRequest)
-		return
-	}
-
-	subPath := req.Params["path"]
-	if subPath == "" {
-		subPath = "." // корень репозитория
-	}
-
-	fullPath := filepath.Join(projectPath, subPath)
-
-	// Клонируем или обновляем репозиторий
-	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
-		cloneCmd := exec.Command("git", "clone", repoURL, projectPath)
-		if out, err := cloneCmd.CombinedOutput(); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to clone repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		updateCmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git fetch && git reset --hard origin/main", projectPath))
-		if out, err := updateCmd.CombinedOutput(); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to update repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
-			return
-		}
-	}
-
 	switch req.TaskType {
 	case "build":
+		repoURL := req.Params["repo_url"]
 		branch := req.Params["branch"]
-		if branch == "" {
-			http.Error(w, "Missing 'branch' param", http.StatusBadRequest)
-			return
-		}
-
-		registry := req.Params["registry"]
-		if registry == "" {
-			http.Error(w, "Missing 'registry' param", http.StatusBadRequest)
-			return
-		}
-
+		path := req.Params["path"]
 		imageName := req.Params["image_name"]
-		if imageName == "" {
-			http.Error(w, "Missing 'image_name' param", http.StatusBadRequest)
+		tag := req.Params["tag"]
+
+		if repoURL == "" || branch == "" || path == "" || imageName == "" || tag == "" {
+			http.Error(w, "Missing one or more required parameters", http.StatusBadRequest)
 			return
 		}
 
-		// git checkout нужной ветки и pull
-		checkoutCmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git checkout %s && git pull origin %s", projectPath, branch, branch))
-		if out, err := checkoutCmd.CombinedOutput(); err != nil {
-			http.Error(w, fmt.Sprintf("Git checkout failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+		jobName := fmt.Sprintf("kaniko-build-%d-%d", req.ProjectID, time.Now().Unix())
+
+		fullImage := fmt.Sprintf("registry.registry.svc.cluster.local:5000/%s:%s", imageName, tag)
+
+		// Kaniko Job YAML
+		jobYAML := fmt.Sprintf(`
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: %s
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      containers:
+      - name: kaniko
+        image: gcr.io/kaniko-project/executor:latest
+        args:
+        - "--context=git://%s#%s"
+        - "--dockerfile=%s/Dockerfile"
+        - "--destination=%s"
+        - "--insecure"
+        - "--insecure-pull"
+        - "--insecure-registry=registry.registry.svc.cluster.local:5000"
+      restartPolicy: Never
+`, jobName, strings.TrimPrefix(repoURL, "https://"), branch, path, fullImage)
+
+		tmpFile, err := os.CreateTemp("", "kaniko-job-*.yaml")
+		if err != nil {
+			http.Error(w, "Failed to create temp file for job", http.StatusInternalServerError)
+			return
+		}
+		defer os.Remove(tmpFile.Name())
+
+		if _, err := tmpFile.Write([]byte(jobYAML)); err != nil {
+			http.Error(w, "Failed to write job manifest", http.StatusInternalServerError)
+			return
+		}
+		tmpFile.Close()
+
+		cmd := exec.Command("kubectl", "apply", "-f", tmpFile.Name())
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to apply job:\n%s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
 			return
 		}
 
-		// docker build
-		imageTag := fmt.Sprintf("%s/%s:%s", registry, imageName, branch)
-		buildCmd := exec.Command("docker", "build", "-t", imageTag, fullPath)
-		if out, err := buildCmd.CombinedOutput(); err != nil {
-			http.Error(w, fmt.Sprintf("Docker build failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
-			return
-		}
-
-		// docker push
-		pushCmd := exec.Command("docker", "push", imageTag)
-		if out, err := pushCmd.CombinedOutput(); err != nil {
-			http.Error(w, fmt.Sprintf("Docker push failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
-			return
-		}
-
-		w.Write([]byte(fmt.Sprintf("Docker image built and pushed: %s\n", imageTag)))
-
-	case "lint":
-		// Здесь можно оставить или переделать под другие задачи
-		http.Error(w, "Lint task is not implemented", http.StatusNotImplemented)
+		w.Write([]byte(fmt.Sprintf("✅ Kaniko build job создан: %s\n📦 Образ будет загружен в: %s", jobName, fullImage)))
 
 	default:
 		http.Error(w, "Unknown task_type", http.StatusBadRequest)
