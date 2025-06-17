@@ -466,6 +466,7 @@ const DashboardForMain = () => {
         if (serviceType === 'frontend') {
           let buildParams = null;
       
+          // Функция, которая показывает второй prompt с параметрами деплоя
           const askDeployParams = () => {
             setShowMessageBox({
               isOpen: true,
@@ -487,6 +488,7 @@ const DashboardForMain = () => {
                 setShowMessageBox(null);
       
                 try {
+                  // Отправляем задачу сборки
                   const buildBody = {
                     project_id: currentProjectId,
                     task_type: 'build',
@@ -494,7 +496,9 @@ const DashboardForMain = () => {
                   };
                   console.log('📦 Отправка запроса билда:', buildBody);
                   await runProjectTask(buildBody);
+                  console.log('✅ Билд завершён успешно');
       
+                  // Формируем спецификацию пода и сервиса
                   const podSpec = {
                     namespace: deployParams.namespace,
                     podName: deployParams.podName,
@@ -507,6 +511,8 @@ const DashboardForMain = () => {
                   };
       
                   console.log('🚀 Создание пода и сервиса:', podSpec);
+      
+                  // Создаём под и сервис
                   const result = await createPodAndService(currentProjectId, podSpec);
       
                   alert(`✅ Frontend задеплоен. NodePort: ${result.nodePort}`);
@@ -521,7 +527,7 @@ const DashboardForMain = () => {
                   setNodes((ns) => [...ns, newNode]);
                 } catch (err) {
                   console.error('❌ Ошибка билда или деплоя:', err);
-                  alert('Ошибка билда или деплоя: ' + err.message);
+                  alert('Ошибка билда или деплоя: ' + (err.message || err));
                 }
               },
               onCancel: () => setShowMessageBox(null),
@@ -546,19 +552,19 @@ const DashboardForMain = () => {
                 return;
               }
               setShowMessageBox(null);
+              // После успешного ввода параметров билда - спрашиваем параметры деплоя
+              askDeployParams();
             },
             onCancel: () => setShowMessageBox(null),
             onClose: () => {
-              if (buildParams) {
-                askDeployParams();
-              }
+              // Если окно закрыли, не продолжаем
             },
           });
       
           return;
         }
       
-        // Остальные сервисы
+        // Обработка остальных сервисов
         const position = { x: contextMenu.x, y: contextMenu.y };
         setContextMenu(null);
       
@@ -591,7 +597,7 @@ const DashboardForMain = () => {
               setNodes((ns) => [...ns, newNode]);
             } catch (err) {
               console.error('❌ Ошибка создания сервиса:', err);
-              alert('Ошибка: ' + err.message);
+              alert('Ошибка: ' + (err.message || err));
             }
           },
           onCancel: () => setShowMessageBox(null),
@@ -607,6 +613,7 @@ const DashboardForMain = () => {
         setContextMenu,
         setShowMessageBox,
       ]);
+      
       
       
       
