@@ -1398,39 +1398,32 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 
 	projectPath := fmt.Sprintf("/projects/%d", req.ProjectID)
 
-	// Проверяем, что repo_url передан
 	repoURL, ok := req.Params["repo_url"]
 	if !ok || repoURL == "" {
 		http.Error(w, "'repo_url' param is required", http.StatusBadRequest)
 		return
 	}
 
-	// Путь внутри репозитория (поддиректория с Dockerfile и кодом)
 	subPath := req.Params["path"]
 	if subPath == "" {
-		subPath = "." // если не указан — берем корень репы
+		subPath = "." // корень репозитория
 	}
 
 	fullPath := filepath.Join(projectPath, subPath)
 
-	// Клонируем репозиторий, если нет папки проекта
+	// Клонируем или обновляем репозиторий
 	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
 		cloneCmd := exec.Command("git", "clone", repoURL, projectPath)
-		out, err := cloneCmd.CombinedOutput()
-		if err != nil {
+		if out, err := cloneCmd.CombinedOutput(); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to clone repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Repo cloned to %s", projectPath)
 	} else {
-		// Если папка есть, обновим репозиторий (git fetch + reset)
 		updateCmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git fetch && git reset --hard origin/main", projectPath))
-		out, err := updateCmd.CombinedOutput()
-		if err != nil {
+		if out, err := updateCmd.CombinedOutput(); err != nil {
 			http.Error(w, fmt.Sprintf("Failed to update repo: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
 			return
 		}
-		log.Printf("Repo updated at %s", projectPath)
 	}
 
 	switch req.TaskType {
@@ -1441,24 +1434,45 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		cmdStr := fmt.Sprintf("cd %s && git checkout %s && git pull origin %s && make build", fullPath, branch, branch)
-		cmd := exec.Command("sh", "-c", cmdStr)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Build failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+		registry := req.Params["registry"]
+		if registry == "" {
+			http.Error(w, "Missing 'registry' param", http.StatusBadRequest)
 			return
 		}
-		w.Write([]byte(fmt.Sprintf("Build succeeded:\n%s", string(out))))
+
+		imageName := req.Params["image_name"]
+		if imageName == "" {
+			http.Error(w, "Missing 'image_name' param", http.StatusBadRequest)
+			return
+		}
+
+		// git checkout нужной ветки и pull
+		checkoutCmd := exec.Command("sh", "-c", fmt.Sprintf("cd %s && git checkout %s && git pull origin %s", projectPath, branch, branch))
+		if out, err := checkoutCmd.CombinedOutput(); err != nil {
+			http.Error(w, fmt.Sprintf("Git checkout failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			return
+		}
+
+		// docker build
+		imageTag := fmt.Sprintf("%s/%s:%s", registry, imageName, branch)
+		buildCmd := exec.Command("docker", "build", "-t", imageTag, fullPath)
+		if out, err := buildCmd.CombinedOutput(); err != nil {
+			http.Error(w, fmt.Sprintf("Docker build failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			return
+		}
+
+		// docker push
+		pushCmd := exec.Command("docker", "push", imageTag)
+		if out, err := pushCmd.CombinedOutput(); err != nil {
+			http.Error(w, fmt.Sprintf("Docker push failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			return
+		}
+
+		w.Write([]byte(fmt.Sprintf("Docker image built and pushed: %s\n", imageTag)))
 
 	case "lint":
-		cmdStr := fmt.Sprintf("cd %s && make lint", fullPath)
-		cmd := exec.Command("sh", "-c", cmdStr)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Lint failed: %s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
-			return
-		}
-		w.Write([]byte(fmt.Sprintf("Lint passed:\n%s", string(out))))
+		// Здесь можно оставить или переделать под другие задачи
+		http.Error(w, "Lint task is not implemented", http.StatusNotImplemented)
 
 	default:
 		http.Error(w, "Unknown task_type", http.StatusBadRequest)
