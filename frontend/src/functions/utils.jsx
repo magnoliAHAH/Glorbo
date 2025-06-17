@@ -105,6 +105,68 @@ export function createReactFlowServiceNode(id, serviceType, position, name, proj
  * @param {number} depth - Текущая глубина в древовидной структуре.
  * @returns {JSX.Element | null} JSX-элемент для отображения узла и его дочерних элементов.
  */
+export function renderFileNodeForSidebar(node, depth = 0) {
+    if (!node) return null; // Защита от пустого узла
+
+    const indent = depth * 20;
+
+    const nodeStyle = {
+        marginLeft: `${indent}px`,
+        padding: '5px',
+        borderLeft: depth > 0 ? '1px solid #ccc' : 'none',
+        marginBottom: '2px',
+        backgroundColor: 'rgba(255,255,255,0.05)', // Легкий фон для узлов
+        borderRadius: '3px'
+    };
+
+    let icon = '📄'; // Иконка по умолчанию для файла
+    let typeText = node.type; // Текст типа
+    let details = []; // Дополнительные детали для отображения
+
+    // Определяем иконку, тип и детали в зависимости от типа узла
+    if (node.type === 'folder') {
+        icon = '📁';
+        typeText = 'Folder';
+    } else if (node.type === 'service') {
+        icon = '🚀';
+        typeText = `Service`;
+        details.push(<div key="s-type">**Type:** {node.serviceType || 'N/A'}</div>);
+        if (node.status) details.push(<div key="s-status">**Status:** {node.status}</div>);
+        if (node.position) details.push(<div key="s-pos">**Position:** ({node.position.x?.toFixed(0)}, {node.position.y?.toFixed(0)})</div>);
+        if (node.version) details.push(<div key="s-version">**Version:** {node.version}</div>);
+        if (node.volume) details.push(<div key="s-volume">**Volume:** {node.volume}</div>);
+        // Если сервис содержит projectId в своих данных, отобразим его
+        if (node.projectId) details.push(<div key="s-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
+
+    } else if (node.type === 'repo') {
+        icon = '📦';
+        typeText = 'Repository';
+        details.push(<div key="r-url">**URL:** {node.url || 'N/A'}</div>); // <--- ИЗМЕНИТЬ ЗДЕСЬ
+        if (node.projectId) details.push(<div key="r-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
+    } else if (node.type === 'file') {
+        typeText = 'File';
+        if (node.size) details.push(<div key="f-size">**Size:** {node.size}</div>);
+    }
+
+
+    return (
+        <div key={node.id} style={nodeStyle}>
+            <span style={{ fontWeight: 'bold' }}>{icon} {node.name}</span>
+            <span style={{ fontSize: '0.8em', color: '#888', marginLeft: '5px' }}>[{typeText}]</span>
+            {details.length > 0 && (
+                <div style={{ fontSize: '0.85em', color: '#555', marginTop: '5px' }}>
+                    {details}
+                </div>
+            )}
+            {/* Рекурсивно рендерим дочерние элементы */}
+            {node.children && node.children.length > 0 && (
+                <div style={{ paddingLeft: '10px' }}>
+                    {node.children.map(child => renderFileNodeForSidebar(child, depth + 1))}
+                </div>
+            )}
+        </div>
+    );
+}
 
 /**
  * Вспомогательная функция для плоского отображения информации о сервисе (для сайдбара).
@@ -132,106 +194,4 @@ export function renderServiceInfoForSidebar(serviceData) {
             
         </div>
     );
-}
-/**
- * Вспомогательная функция для рекурсивного обхода и нормализации узлов файловой структуры.
- * Преобразует поля ProjectID/projectId из sql.NullInt64 в число или null.
- * @param {object} node - Узел файловой структуры.
- * @returns {object} Нормализованная копия узла.
- */
-const normalizeFileNodeData = (node) => {
-    if (!node) return null;
-
-    const newNode = { ...node };
-
-    // Проверяем и нормализуем `ProjectID` (с заглавной буквы, как в Go JSON)
-    if (newNode.ProjectID && typeof newNode.ProjectID === 'object' &&
-        'Int64' in newNode.ProjectID && 'Valid' in newNode.ProjectID) {
-        newNode.ProjectID = newNode.ProjectID.Valid ? newNode.ProjectID.Int64 : null;
-    }
-    // Проверяем и нормализуем `projectId` (в нижнем регистре, если используется camelCase)
-    if (newNode.projectId && typeof newNode.projectId === 'object' &&
-        'Int64' in newNode.projectId && 'Valid' in newNode.projectId) {
-        newNode.projectId = newNode.projectId.Valid ? newNode.projectId.Int64 : null;
-    }
-
-    // Рекурсивно обрабатываем детей
-    // ИЗМЕНЕНИЕ ЗДЕСЬ: Вызов самой себя normalizeFileNodeData(child), а не несуществующей recursivelyNormalizeFileNode
-    if (newNode.Children && Array.isArray(newNode.Children)) {
-        newNode.Children = newNode.Children.map(child => normalizeFileNodeData(child));
-    }
-
-    return newNode;
-};
-/**
- * Вспомогательная функция для рекурсивного отображения древовидной структуры репозитория в сайдбаре.
- * @param {object} node - Текущий узел (файл или папка).
- * @param {number} depth - Глубина вложенности для отступов.
- * @returns {JSX.Element | null} JSX-элемент для отображения узла.
- */
-export function renderFileNodeForSidebar(node, depth = 0) {
-    // ВАЖНО: Убедитесь, что данные node уже нормализованы перед вызовом этой функции
-    // (это должно происходить в onNodeClick в DashboardForMain).
-    // Тем не менее, добавим здесь оборонительную проверку на случай, если данные не были нормализованы.
-    const normalizedNode = normalizeFileNodeData(node); // Повторная нормализация для безопасности
-
-    if (!normalizedNode) return null;
-
-    if (normalizedNode.Type === 'folder') { // Предполагаем, что поле типа - 'Type'
-        return (
-            <FolderItem key={normalizedNode.id} depth={depth}>
-                📁 {normalizedNode.name}
-                {normalizedNode.Children && (
-                    <ul>
-                        {normalizedNode.Children.map(child => renderFileNodeForSidebar(child, depth + 1))}
-                    </ul>
-                )}
-            </FolderItem>
-        );
-    } else if (normalizedNode.Type === 'file') { // Предполагаем, что поле типа - 'Type'
-        return (
-            <FileItem key={normalizedNode.id} depth={depth}>
-                📄 {normalizedNode.name}
-                {/* Здесь вы можете отобразить ProjectID или projectId, если оно есть и уже нормализовано */}
-                {/* Оборонительная проверка: если ProjectID/projectId все еще объект, отображаем Int64 */}
-                {normalizedNode.ProjectID !== undefined && normalizedNode.ProjectID !== null && (
-                    <span> (ProjectID: {
-                        typeof normalizedNode.ProjectID === 'object' && 'Int64' in normalizedNode.ProjectID
-                            ? normalizedNode.ProjectID.Int64
-                            : normalizedNode.ProjectID
-                    })</span>
-                )}
-                 {normalizedNode.projectId !== undefined && normalizedNode.projectId !== null && (
-                    <span> (projectId: {
-                        typeof normalizedNode.projectId === 'object' && 'Int64' in normalizedNode.projectId
-                            ? normalizedNode.projectId.Int64
-                            : normalizedNode.projectId
-                    })</span>
-                )}
-            </FileItem>
-        );
-    }
-    // Для узлов репозитория (корневой узел, переданный в sidebarContent.type === 'repo')
-    else if (normalizedNode.type === 'repo') { // Используем 'type' из React Flow data
-        return (
-            <div>
-                <h4>Репозиторий: {normalizedNode.name}</h4>
-                <p>URL: {normalizedNode.URL || 'N/A'}</p> {/* <-- ИЗМЕНЕНО ЗДЕСЬ: node.url на node.URL */}
-                {normalizedNode.projectId !== undefined && normalizedNode.projectId !== null && (
-                    <p>ID Проекта: {
-                        typeof normalizedNode.projectId === 'object' && 'Int64' in normalizedNode.projectId
-                            ? normalizedNode.projectId.Int64
-                            : normalizedNode.projectId
-                    }</p>
-                )}
-                {/* Отображаем дочерние элементы репозитория */}
-                {normalizedNode.Children && Array.isArray(normalizedNode.Children) && (
-                    <ul>
-                        {normalizedNode.Children.map(child => renderFileNodeForSidebar(child, depth + 1))}
-                    </ul>
-                )}
-            </div>
-        );
-    }
-    return null; // Если тип узла неизвестен
 }
