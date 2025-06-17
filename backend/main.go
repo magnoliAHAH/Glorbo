@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -450,25 +451,26 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 
 	requestsTotal.WithLabelValues("/api/create-service", r.Method).Inc()
+
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// Авторизация
+	// Проверка авторизации
 	if r.Context().Value(userIDKey) == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// Парсим тело
+	// Парсим тело запроса
 	var req struct {
 		ProjectID   int64     `json:"projectId"`
 		ServiceType string    `json:"serviceType"`
 		Position    *Position `json:"position"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 	if req.ProjectID == 0 || req.ServiceType == "" {
@@ -484,11 +486,11 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	serviceName := fmt.Sprintf("%s-service-%s", req.ServiceType, serviceID[:4])
 	servicePath := strings.ToLower(req.ServiceType)
 
-	// Вставляем в БД
+	// Вставляем в базу данных
 	if _, err := db.Exec(`
-        INSERT INTO services
-          (id, project_id, name, type, status, volume, version, path, position_x, position_y)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		INSERT INTO services
+			(id, project_id, name, type, status, volume, version, path, position_x, position_y)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		serviceID, req.ProjectID, serviceName, req.ServiceType,
 		"pending", "", "", servicePath, req.Position.X, req.Position.Y,
 	); err != nil {
@@ -497,49 +499,55 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Инициализируем in-cluster k8s-клиент
+	// Kubernetes
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		log.Printf("k8s config error: %v", err)
-	} else if clientset, err := kubernetes.NewForConfig(cfg); err != nil {
-		log.Printf("k8s client error: %v", err)
+		log.Printf("Failed to get k8s config: %v", err)
 	} else {
-		nsName := fmt.Sprintf("project-%d", req.ProjectID)
+		clientset, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			log.Printf("Failed to create k8s client: %v", err)
+		} else {
+			nsName := fmt.Sprintf("project-%d", req.ProjectID)
 
-		// 1) убедиться, что namespace существует
-		if _, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{}); err != nil {
-			// если не нашли — создаём
-			ns := &v1.Namespace{
+			// Проверка наличия Namespace, если нет — создаём
+			_, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
+			if apierrors.IsNotFound(err) {
+				_, err = clientset.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nsName,
+					},
+				}, metav1.CreateOptions{})
+				if err != nil {
+					log.Printf("Failed to create namespace %s: %v", nsName, err)
+				} else {
+					log.Printf("Namespace %s created", nsName)
+				}
+			} else if err != nil {
+				log.Printf("Failed to get namespace %s: %v", nsName, err)
+			}
+
+			// Создание Pod в нужном namespace
+			pod := &v1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: nsName,
+					Name:      serviceName,
+					Namespace: nsName,
+					Labels:    map[string]string{"app": req.ServiceType},
+				},
+				Spec: v1.PodSpec{
+					Containers: []v1.Container{{
+						Name:  serviceName,
+						Image: "nginx:latest",
+					}},
+					RestartPolicy: v1.RestartPolicyAlways,
 				},
 			}
-			if _, err := clientset.CoreV1().
-				Namespaces().
-				Create(context.TODO(), ns, metav1.CreateOptions{}); err != nil {
-				log.Printf("Failed to create namespace %s: %v", nsName, err)
+			_, err = clientset.CoreV1().Pods(nsName).Create(context.TODO(), pod, metav1.CreateOptions{})
+			if err != nil {
+				log.Printf("Failed to create pod %s in namespace %s: %v", serviceName, nsName, err)
+			} else {
+				log.Printf("Pod %s created in namespace %s", serviceName, nsName)
 			}
-		}
-
-		// 2) создаём Pod в этом namespace
-		pod := &v1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      serviceName,
-				Namespace: nsName,
-				Labels:    map[string]string{"app": req.ServiceType},
-			},
-			Spec: v1.PodSpec{
-				Containers: []v1.Container{{
-					Name:  serviceName,
-					Image: "nginx:latest",
-				}},
-				RestartPolicy: v1.RestartPolicyAlways,
-			},
-		}
-		if _, err := clientset.CoreV1().
-			Pods(nsName).
-			Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
-			log.Printf("Failed to create Pod %s in namespace %s: %v", serviceName, nsName, err)
 		}
 	}
 
