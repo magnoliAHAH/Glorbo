@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -1204,7 +1205,20 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Удаляем сервис из БД, убедившись, что он принадлежит указанному проекту
+	// Получаем имя сервиса перед удалением
+	var serviceName string
+	err = db.QueryRow("SELECT name FROM services WHERE id = $1 AND project_id = $2", serviceID, projectID).Scan(&serviceName)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Service not found", http.StatusNotFound)
+		} else {
+			log.Printf("Error fetching service name: %v", err)
+			http.Error(w, "Failed to query service", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Удаляем из базы
 	result, err := db.Exec("DELETE FROM services WHERE id = $1 AND project_id = $2", serviceID, projectID)
 	if err != nil {
 		log.Printf("Error deleting service %s from project %d: %v", serviceID, projectID, err)
@@ -1214,8 +1228,8 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		log.Printf("Error checking affected rows for service deletion: %v", err)
-		http.Error(w, "Failed to confirm service deletion", http.StatusInternalServerError)
+		log.Printf("Error checking affected rows: %v", err)
+		http.Error(w, "Failed to confirm deletion", http.StatusInternalServerError)
 		return
 	}
 
@@ -1224,9 +1238,33 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Удаляем Pod в Kubernetes
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		log.Printf("Failed to get in-cluster config: %v", err)
+	} else {
+		clientset, err := kubernetes.NewForConfig(cfg)
+		if err != nil {
+			log.Printf("Failed to create Kubernetes client: %v", err)
+		} else {
+			ns := fmt.Sprintf("project-%d", projectID)
+			err := clientset.CoreV1().Pods(ns).Delete(context.TODO(), serviceName, metav1.DeleteOptions{})
+			if err != nil {
+				if apierrors.IsNotFound(err) {
+					log.Printf("Pod %s already deleted in namespace %s", serviceName, ns)
+				} else {
+					log.Printf("Failed to delete pod %s in namespace %s: %v", serviceName, ns, err)
+				}
+			} else {
+				log.Printf("Pod %s successfully deleted from namespace %s", serviceName, ns)
+			}
+		}
+	}
+
+	// Ответ
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Service deleted successfully",
+		"message": "Service and related pod deleted successfully",
 	})
 }
 
