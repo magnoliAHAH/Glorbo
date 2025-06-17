@@ -133,7 +133,35 @@ export function renderServiceInfoForSidebar(serviceData) {
         </div>
     );
 }
+/**
+ * Вспомогательная функция для рекурсивного обхода и нормализации узлов файловой структуры.
+ * Преобразует поля ProjectID/projectId из sql.NullInt64 в число или null.
+ * @param {object} node - Узел файловой структуры.
+ * @returns {object} Нормализованная копия узла.
+ */
+const normalizeFileNodeData = (node) => {
+    if (!node) return null;
 
+    const newNode = { ...node };
+
+    // Проверяем и нормализуем `ProjectID` (с заглавной буквы, как в Go JSON)
+    if (newNode.ProjectID && typeof newNode.ProjectID === 'object' &&
+        'Int64' in newNode.ProjectID && 'Valid' in newNode.ProjectID) {
+        newNode.ProjectID = newNode.ProjectID.Valid ? newNode.ProjectID.Int64 : null;
+    }
+    // Проверяем и нормализуем `projectId` (в нижнем регистре, если используется camelCase)
+    if (newNode.projectId && typeof newNode.projectId === 'object' &&
+        'Int64' in newNode.projectId && 'Valid' in newNode.projectId) {
+        newNode.projectId = newNode.projectId.Valid ? newNode.projectId.Int64 : null;
+    }
+
+    // Рекурсивно обрабатываем детей
+    if (newNode.Children && Array.isArray(newNode.Children)) {
+        newNode.Children = newNode.Children.map(child => normalizeFileNodeData(child));
+    }
+
+    return newNode;
+};
 /**
  * Вспомогательная функция для рекурсивного отображения древовидной структуры репозитория в сайдбаре.
  * @param {object} node - Текущий узел (файл или папка).
