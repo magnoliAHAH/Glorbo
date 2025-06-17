@@ -625,10 +625,6 @@ const DashboardForMain = () => {
 
     return (
         <Page>
-            <Header>
-                <Title>📊 Dashboard проекта</Title>
-                <SwitchButton onClick={handleChangeRepo}>Сменить репозиторий</SwitchButton>
-            </Header>
 
             <Content>
                 {loading && <Spinner />}
