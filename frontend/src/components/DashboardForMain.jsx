@@ -450,8 +450,6 @@ const DashboardForMain = () => {
 
     // Обработчик для создания нового сервиса
     const handleCreateService = useCallback(async (serviceType) => {
-        console.log(`🟡 Начинаем создание ${serviceType}-сервиса...`)
-      
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
           setShowMessageBox({
             isOpen: true,
@@ -459,15 +457,14 @@ const DashboardForMain = () => {
             title: 'Ошибка',
             message: 'ID проекта не найден или недействителен.',
             onClose: () => setShowMessageBox(null),
-          })
-          return
+          });
+          return;
         }
       
-        const position = { x: contextMenu?.x || 0, y: contextMenu?.y || 0 }
-        setContextMenu(null)
-      
         if (serviceType === 'frontend') {
-          // Шаг 1: prompt для build
+          console.log('🟡 Начинаем создание frontend-сервиса...');
+      
+          // Шаг 1: Build-параметры
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
@@ -475,25 +472,17 @@ const DashboardForMain = () => {
             message: 'Введите JSON с полями repo_url, branch, path, image_name, tag',
             placeholder: `{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}`,
             onConfirm: async (buildJson) => {
-              let buildParams
+              let buildParams;
               try {
-                buildParams = JSON.parse(buildJson)
+                buildParams = JSON.parse(buildJson);
+                console.log('✅ Параметры билда:', buildParams);
               } catch (e) {
-                alert('Неверный JSON: ' + e.message)
-                return
+                alert('Неверный JSON: ' + e.message);
+                return;
               }
+              setShowMessageBox(null);
       
-              console.log('✅ Параметры билда:', {
-                project_id: currentProjectId,
-                task_type: 'build',
-                params: buildParams,
-              })
-      
-              setShowMessageBox(null)
-              await new Promise(resolve => setTimeout(resolve, 0)) // важно для повторного рендера
-      
-              // Шаг 2: prompt для deploy
-              console.log('🟢 Открыт prompt для параметров деплоя')
+              // Шаг 2: Deploy-параметры
               setShowMessageBox({
                 isOpen: true,
                 type: 'prompt',
@@ -501,20 +490,19 @@ const DashboardForMain = () => {
                 message: 'Введите JSON с полями namespace, podName, containerPort, env, labels',
                 placeholder: `{"namespace":"default","podName":"my-pod","containerPort":80,"env":{},"labels":{"app":"frontend"}}`,
                 onConfirm: async (deployJson) => {
-                  console.log('📥 Получен JSON деплоя:', deployJson)
-                  let deployParams
+                  let deployParams;
                   try {
-                    deployParams = JSON.parse(deployJson)
+                    deployParams = JSON.parse(deployJson);
+                    console.log('✅ Параметры деплоя:', deployParams);
                   } catch (e) {
-                    alert('Неверный JSON: ' + e.message)
-                    return
+                    alert('Неверный JSON: ' + e.message);
+                    return;
                   }
-      
-                  setShowMessageBox(null)
+                  setShowMessageBox(null);
       
                   try {
-                    console.log('🚀 Запуск билда...')
-                    await runProjectTask(currentProjectId, 'build', buildParams)
+                    // 🔧 ВАЖНО: передаём только buildParams
+                    await runProjectTask(currentProjectId, 'build', buildParams);
       
                     const podSpec = {
                       namespace: deployParams.namespace,
@@ -525,44 +513,39 @@ const DashboardForMain = () => {
                       command: [],
                       args: [],
                       labels: deployParams.labels,
-                    }
+                    };
       
-                    console.log('🚀 Создание пода и сервиса с конфигом:', podSpec)
-                    const result = await createPodAndService(currentProjectId, podSpec)
+                    const result = await createPodAndService(currentProjectId, podSpec);
       
-                    alert(`✅ Frontend задеплоен. NodePort: ${result.nodePort}`)
+                    alert(`✅ Frontend задеплоен. NodePort: ${result.nodePort}`);
       
                     const newNode = createReactFlowServiceNode(
                       result.podName,
                       'frontend',
-                      position,
+                      { x: contextMenu.x, y: contextMenu.y },
                       deployParams.podName,
                       currentProjectId
-                    )
-                    setNodes(ns => [...ns, newNode])
+                    );
+                    setNodes(ns => [...ns, newNode]);
                   } catch (err) {
-                    console.error('❌ Ошибка билда или деплоя:', err)
-                    alert('Ошибка билда или деплоя: ' + err.message)
+                    console.error('❌ Ошибка во время билда/деплоя:', err);
+                    alert('Ошибка билда или деплоя: ' + err.message);
                   }
                 },
-                onCancel: () => {
-                  console.log('⛔ Отменён ввод параметров деплоя')
-                  setShowMessageBox(null)
-                },
+                onCancel: () => setShowMessageBox(null),
                 onClose: () => setShowMessageBox(null),
-              })
+              });
             },
-            onCancel: () => {
-              console.log('⛔ Отменён ввод параметров билда')
-              setShowMessageBox(null)
-            },
+            onCancel: () => setShowMessageBox(null),
             onClose: () => setShowMessageBox(null),
-          })
+          });
       
-          return
+          return;
         }
       
-        // Для всех остальных сервисов
+        // 🧩 Остальные типы сервисов
+        const position = { x: contextMenu.x, y: contextMenu.y };
+        setContextMenu(null);
         setShowMessageBox({
           isOpen: true,
           type: 'prompt',
@@ -570,37 +553,32 @@ const DashboardForMain = () => {
           message: 'Введите имя (необязательно):',
           placeholder: '',
           onConfirm: async (appName = '') => {
-            setShowMessageBox(null)
+            setShowMessageBox(null);
             try {
-              let res
+              let res;
               if (serviceType === 'authentication') {
-                if (!appName.trim()) throw new Error('Имя обязательно')
-                res = await createAuthService(currentProjectId, appName.trim())
+                if (!appName.trim()) throw new Error('Имя обязательно');
+                res = await createAuthService(currentProjectId, appName.trim());
               } else {
-                res = await createService(currentProjectId, serviceType, position)
+                res = await createService(currentProjectId, serviceType, position);
               }
       
-              alert(`Сервис создан (ID ${res.serviceId || res.authServiceId})`)
-      
+              alert(`Сервис создан (ID ${res.serviceId || res.authServiceId})`);
               const newNode = createReactFlowServiceNode(
                 res.serviceId || res.authServiceId,
                 serviceType,
                 position,
                 appName || res.name,
                 currentProjectId
-              )
-              setNodes(ns => [...ns, newNode])
+              );
+              setNodes(ns => [...ns, newNode]);
             } catch (err) {
-              console.error('❌ Ошибка создания сервиса:', err)
-              alert('Ошибка: ' + err.message)
+              alert('Ошибка: ' + err.message);
             }
           },
-          onCancel: () => {
-            console.log('⛔ Отменено создание сервиса')
-            setShowMessageBox(null)
-          }
-        })
-      }, [currentProjectId, contextMenu, runProjectTask, createPodAndService, createService, createAuthService, setNodes])
+          onCancel: () => setShowMessageBox(null),
+        });
+      }, [currentProjectId, contextMenu, runProjectTask, createPodAndService, createService, createAuthService, setNodes]);
       
       
       
