@@ -30,7 +30,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	v1 "k8s.io/api/core/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -516,7 +517,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 			// Проверка наличия Namespace, если нет — создаём
 			_, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{})
 			if apierrors.IsNotFound(err) {
-				_, err = clientset.CoreV1().Namespaces().Create(context.TODO(), &v1.Namespace{
+				_, err = clientset.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: nsName,
 					},
@@ -531,18 +532,18 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Создание Pod в нужном namespace
-			pod := &v1.Pod{
+			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      serviceName,
 					Namespace: nsName,
 					Labels:    map[string]string{"app": req.ServiceType},
 				},
-				Spec: v1.PodSpec{
-					Containers: []v1.Container{{
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{
 						Name:  serviceName,
 						Image: "nginx:latest",
 					}},
-					RestartPolicy: v1.RestartPolicyAlways,
+					RestartPolicy: corev1.RestartPolicyAlways,
 				},
 			}
 			_, err = clientset.CoreV1().Pods(nsName).Create(context.TODO(), pod, metav1.CreateOptions{})
@@ -1305,29 +1306,29 @@ func initK8sClient() (*kubernetes.Clientset, error) {
 	return kubernetes.NewForConfig(config)
 }
 
-func mapToEnvVars(m map[string]string) []v1.EnvVar {
-	env := make([]v1.EnvVar, 0, len(m))
+func mapToEnvVars(m map[string]string) []corev1.EnvVar {
+	env := make([]corev1.EnvVar, 0, len(m))
 	for k, v := range m {
-		env = append(env, v1.EnvVar{Name: k, Value: v})
+		env = append(env, corev1.EnvVar{Name: k, Value: v})
 	}
 	return env
 }
 
 // createPodFromRequest собирает и создаёт Pod по данным из CreatePodRequest
-func createPodFromRequest(req *CreatePodRequest) (*v1.Pod, error) {
+func createPodFromRequest(req *CreatePodRequest) (*corev1.Pod, error) {
 	clientset, err := initK8sClient()
 	if err != nil {
 		return nil, err
 	}
 
-	pod := &v1.Pod{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      req.PodName,
 			Namespace: req.Namespace,
 			Labels:    req.Labels,
 		},
-		Spec: v1.PodSpec{
-			Containers: []v1.Container{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
 				{
 					Name:    req.PodName,
 					Image:   req.Image,
@@ -1336,7 +1337,7 @@ func createPodFromRequest(req *CreatePodRequest) (*v1.Pod, error) {
 					Env:     mapToEnvVars(req.Env),
 				},
 			},
-			RestartPolicy: v1.RestartPolicyAlways,
+			RestartPolicy: corev1.RestartPolicyAlways,
 		},
 	}
 
@@ -1385,6 +1386,8 @@ type TaskRequest struct {
 	Params    map[string]string `json:"params"`
 }
 
+func int32Ptr(i int32) *int32 { return &i }
+
 func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(userIDKey).(string)
 
@@ -1405,54 +1408,57 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 		tag := req.Params["tag"]
 
 		if repoURL == "" || branch == "" || path == "" || imageName == "" || tag == "" {
-			http.Error(w, "Missing one or more required parameters", http.StatusBadRequest)
+			http.Error(w, "Missing one or more required parameters: repo_url, branch, path, image_name, tag", http.StatusBadRequest)
+			return
+		}
+
+		// Создаем клиент Kubernetes (предполагается, что сервис запущен внутри кластера)
+		config, err := rest.InClusterConfig()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get Kubernetes in-cluster config: %v", err), http.StatusInternalServerError)
+			return
+		}
+		clientset, err := kubernetes.NewForConfig(config)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to create Kubernetes client: %v", err), http.StatusInternalServerError)
 			return
 		}
 
 		jobName := fmt.Sprintf("kaniko-build-%d-%d", req.ProjectID, time.Now().Unix())
-
 		fullImage := fmt.Sprintf("registry.registry.svc.cluster.local:5000/%s:%s", imageName, tag)
 
-		// Kaniko Job YAML
-		jobYAML := fmt.Sprintf(`
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: %s
-spec:
-  backoffLimit: 0
-  template:
-    spec:
-      containers:
-      - name: kaniko
-        image: gcr.io/kaniko-project/executor:latest
-        args:
-        - "--context=git://%s#%s"
-        - "--dockerfile=%s/Dockerfile"
-        - "--destination=%s"
-        - "--insecure"
-        - "--insecure-pull"
-        - "--insecure-registry=registry.registry.svc.cluster.local:5000"
-      restartPolicy: Never
-`, jobName, strings.TrimPrefix(repoURL, "https://"), branch, path, fullImage)
-
-		tmpFile, err := os.CreateTemp("", "kaniko-job-*.yaml")
-		if err != nil {
-			http.Error(w, "Failed to create temp file for job", http.StatusInternalServerError)
-			return
+		job := &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: jobName,
+			},
+			Spec: batchv1.JobSpec{
+				BackoffLimit: int32Ptr(0),
+				Template: corev1.PodTemplateSpec{
+					Spec: corev1.PodSpec{
+						RestartPolicy: corev1.RestartPolicyNever,
+						Containers: []corev1.Container{
+							{
+								Name:  "kaniko",
+								Image: "gcr.io/kaniko-project/executor:latest",
+								Args: []string{
+									fmt.Sprintf("--context=git://%s#%s", strings.TrimPrefix(repoURL, "https://"), branch),
+									fmt.Sprintf("--dockerfile=%s/Dockerfile", path),
+									fmt.Sprintf("--destination=%s", fullImage),
+									"--insecure",
+									"--insecure-pull",
+									"--insecure-registry=registry.registry.svc.cluster.local:5000",
+								},
+							},
+						},
+					},
+				},
+			},
 		}
-		defer os.Remove(tmpFile.Name())
 
-		if _, err := tmpFile.Write([]byte(jobYAML)); err != nil {
-			http.Error(w, "Failed to write job manifest", http.StatusInternalServerError)
-			return
-		}
-		tmpFile.Close()
-
-		cmd := exec.Command("kubectl", "apply", "-f", tmpFile.Name())
-		out, err := cmd.CombinedOutput()
+		// Создаем Job в namespace default (замени на нужный, если нужно)
+		_, err = clientset.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to apply job:\n%s\n%s", err.Error(), string(out)), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("Failed to create Kaniko build job: %v", err), http.StatusInternalServerError)
 			return
 		}
 
