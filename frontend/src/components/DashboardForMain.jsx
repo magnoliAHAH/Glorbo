@@ -461,19 +461,12 @@ const DashboardForMain = () => {
           return;
         }
       
-        if (serviceType === 'frontend') {
-          // шаг 1 — запрашиваем параметры билда
-          const handleFirstPrompt = async (buildJson) => {
-            let buildParams;
-            try {
-              buildParams = JSON.parse(buildJson);
-              console.log('✅ Параметры билда:', buildParams);
-            } catch (e) {
-              alert('❌ Неверный JSON: ' + e.message);
-              return;
-            }
+        console.log('🟡 Начинаем создание', serviceType, '-сервиса...');
       
-            // шаг 2 — запрашиваем параметры деплоя
+        if (serviceType === 'frontend') {
+          let buildParams;
+      
+          const askDeployParams = () => {
             setShowMessageBox({
               isOpen: true,
               type: 'prompt',
@@ -492,14 +485,12 @@ const DashboardForMain = () => {
       
                 setShowMessageBox(null);
       
-                // шаг 3 — делаем build + deploy
                 try {
                   const buildBody = {
                     project_id: currentProjectId,
                     task_type: 'build',
                     params: buildParams,
                   };
-      
                   console.log('📦 Отправка запроса билда:', buildBody);
                   await runProjectTask(buildBody);
       
@@ -528,7 +519,7 @@ const DashboardForMain = () => {
                   );
                   setNodes((ns) => [...ns, newNode]);
                 } catch (err) {
-                  console.error('❌ Ошибка:', err);
+                  console.error('❌ Ошибка билда или деплоя:', err);
                   alert('Ошибка билда или деплоя: ' + err.message);
                 }
               },
@@ -537,23 +528,82 @@ const DashboardForMain = () => {
             });
           };
       
-          // первая форма: build
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
             title: 'Параметры сборки (JSON)',
             message: 'Введите JSON с полями repo_url, branch, path, image_name, tag',
             placeholder: `{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}`,
-            onConfirm: handleFirstPrompt,
+            onConfirm: async (buildJson) => {
+              try {
+                buildParams = JSON.parse(buildJson);
+                console.log('✅ Параметры билда:', buildParams);
+              } catch (e) {
+                alert('❌ Неверный JSON: ' + e.message);
+                return;
+              }
+              setShowMessageBox(null);
+            },
             onCancel: () => setShowMessageBox(null),
-            onClose: () => setShowMessageBox(null),
+            onClose: () => {
+              if (buildParams) {
+                askDeployParams();
+              }
+            },
           });
       
           return;
         }
       
-        // остальной код (другие типы сервисов) — не трогаем
-      }, [currentProjectId, contextMenu, runProjectTask, createPodAndService, setShowMessageBox, setNodes]);
+        // ВСЕ ОСТАЛЬНЫЕ СЕРВИСЫ
+        const position = { x: contextMenu.x, y: contextMenu.y };
+        setContextMenu(null);
+      
+        setShowMessageBox({
+          isOpen: true,
+          type: 'prompt',
+          title: `Создать ${serviceType}-сервис`,
+          message: 'Введите имя (необязательно):',
+          placeholder: '',
+          onConfirm: async (appName = '') => {
+            setShowMessageBox(null);
+            try {
+              let res;
+              if (serviceType === 'authentication') {
+                if (!appName.trim()) throw new Error('Имя обязательно');
+                res = await createAuthService(currentProjectId, appName.trim());
+              } else {
+                res = await createService(currentProjectId, serviceType, position);
+              }
+      
+              alert(`✅ Сервис создан (ID ${res.serviceId || res.authServiceId})`);
+      
+              const newNode = createReactFlowServiceNode(
+                res.serviceId || res.authServiceId,
+                serviceType,
+                position,
+                appName || res.name,
+                currentProjectId
+              );
+              setNodes((ns) => [...ns, newNode]);
+            } catch (err) {
+              console.error('❌ Ошибка создания сервиса:', err);
+              alert('Ошибка: ' + err.message);
+            }
+          },
+          onCancel: () => setShowMessageBox(null),
+        });
+      }, [
+        currentProjectId,
+        contextMenu,
+        runProjectTask,
+        createPodAndService,
+        createService,
+        createAuthService,
+        setNodes,
+        setContextMenu,
+        setShowMessageBox,
+      ]);
       
       
       
