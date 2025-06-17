@@ -103,9 +103,10 @@ const RepoNode = ({ data }) => (
 
 const ServiceNode = ({ data }) => (
     <ServiceNodeContainer serviceType={data.serviceType}>
-        ⚙️ {data.name || 'Service'} ({data.serviceType})
+      <div>⚙️ {data.name || 'Service'}</div>
+      <StatusText>{data.status || 'unknown'}</StatusText>
     </ServiceNodeContainer>
-);
+  );
 
 const nodeTypes = {
     repoNode: RepoNode,
@@ -643,4 +644,10 @@ const DeleteButton = styled.button`
         background-color: #cccccc;
         cursor: not-allowed;
     }
+`;
+
+const StatusText = styled.div`
+  margin-top: 6px;
+  font-size: 0.8em;
+  color: #666;
 `;
