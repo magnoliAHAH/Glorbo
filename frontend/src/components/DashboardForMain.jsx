@@ -399,33 +399,44 @@ const DashboardForMain = () => {
         }
       }, [setNodes]);
       
+      const recursivelyNormalizeFileNode = (node) => {
+        if (!node) return null;
+    
+        const newNode = { ...node };
+    
+        // Check for `ProjectID` (Go's exported field name)
+        if (newNode.ProjectID && typeof newNode.ProjectID === 'object' &&
+            'Int64' in newNode.ProjectID && 'Valid' in newNode.ProjectID) {
+            newNode.ProjectID = newNode.ProjectID.Valid ? newNode.ProjectID.Int64 : null;
+        }
+        // Check for `projectId` (common JavaScript camelCase)
+        if (newNode.projectId && typeof newNode.projectId === 'object' &&
+            'Int64' in newNode.projectId && 'Valid' in newNode.projectId) {
+            newNode.projectId = newNode.projectId.Valid ? newNode.projectId.Int64 : null;
+        }
+    
+        // Recursively process children
+        if (newNode.Children && Array.isArray(newNode.Children)) {
+            newNode.Children = newNode.Children.map(child => recursivelyNormalizeFileNode(child));
+        }
+    
+        return newNode;
+    };
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
-        setIsSidebarOpen(true);
+    setIsSidebarOpen(true);
 
-        if (node.type === 'repoNode' && structure) {
-            // Создаем нормализованную копию structure, чтобы безопасно передать в sidebar
-            const normalizedStructure = { ...structure };
-
-            // Проверяем и нормализуем `projectId` (в нижнем регистре, как в JSON)
-            if (normalizedStructure.projectId && typeof normalizedStructure.projectId === 'object' &&
-                'Int64' in normalizedStructure.projectId && 'Valid' in normalizedStructure.projectId) {
-                normalizedStructure.projectId = normalizedStructure.projectId.Valid ? normalizedStructure.projectId.Int64 : null;
-            }
-            // Также проверяем и нормализуем `ProjectID` (с заглавной буквы, если JSON поле соответствует имени Go-структуры)
-            if (normalizedStructure.ProjectID && typeof normalizedStructure.ProjectID === 'object' &&
-                'Int64' in normalizedStructure.ProjectID && 'Valid' in normalizedStructure.ProjectID) {
-                normalizedStructure.ProjectID = normalizedStructure.ProjectID.Valid ? normalizedStructure.ProjectID.Int64 : null;
-            }
-
-            setSidebarContent({ type: 'repo', ...normalizedStructure, URL: node.data.URL });
-        } else if (node.type === 'serviceNode') {
-            setSidebarContent({ type: 'serviceNode', ...node.data });
-        } else {
-            setSidebarContent(null);
-            console.log('Clicked non-special node:', node);
-        }
+    if (node.type === 'repoNode' && structure) {
+        // Применяем рекурсивную нормализацию ко всей структуре перед передачей в sidebarContent
+        const fullyNormalizedStructure = recursivelyNormalizeFileNode(structure);
+        setSidebarContent({ type: 'repo', ...fullyNormalizedStructure, URL: node.data.URL });
+    } else if (node.type === 'serviceNode') {
+        setSidebarContent({ type: 'serviceNode', ...node.data });
+    } else {
+        // Если это не repoNode или serviceNode, и специфичное содержимое сайдбара не требуется, устанавливаем в null
+        setSidebarContent(null);
+    }
     }, [structure, currentProjectId]);
 
     // Обработчик правого клика по фону холста (ПКМ)
