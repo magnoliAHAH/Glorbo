@@ -524,7 +524,7 @@ const DashboardForMain = () => {
             }
         } catch (error) {
             // This catch block will primarily handle errors from createService for non-auth types
-            // and possibly other unexpected errors. Auth service errors are handled inside its specific try/catch.
+            // and possibly other unexpected errors. Auth service errors are handled inside its specific try/catchfd.
             console.error('Failed to create service:', error.message);
             setShowMessageBox({
                 isOpen: true,
