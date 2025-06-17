@@ -26,14 +26,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
-
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 // Глобальные переменные для подключения к БД и gRPC клиента
@@ -183,7 +183,7 @@ func main() {
 		WithAuth(http.HandlerFunc(getUsersHandler)),
 	).Methods("GET", "OPTIONS")
 
-	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePod))).Methods("POST", "OPTIONS")
+	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePodAndService))).Methods("POST", "OPTIONS")
 
 	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")
 
@@ -1272,13 +1272,14 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreatePodRequest struct {
-	Namespace string            `json:"namespace"`     // куда создавать
-	PodName   string            `json:"podName"`       // имя Pod
-	Image     string            `json:"image"`         // образ контейнера
-	Env       map[string]string `json:"env,omitempty"` // переменные окружения
-	Command   []string          `json:"command,omitempty"`
-	Args      []string          `json:"args,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
+	Namespace     string            `json:"namespace"`     // куда создавать
+	PodName       string            `json:"podName"`       // имя Pod
+	Image         string            `json:"image"`         // образ контейнера
+	Env           map[string]string `json:"env,omitempty"` // переменные окружения
+	Command       []string          `json:"command,omitempty"`
+	Args          []string          `json:"args,omitempty"`
+	Labels        map[string]string `json:"labels,omitempty"`
+	ContainerPort int32             `json:"containerPort"`
 }
 
 type CreatePodResponse struct {
@@ -1314,11 +1315,10 @@ func mapToEnvVars(m map[string]string) []corev1.EnvVar {
 	return env
 }
 
-// createPodFromRequest собирает и создаёт Pod по данным из CreatePodRequest
-func createPodFromRequest(req *CreatePodRequest) (*corev1.Pod, error) {
+func createPodAndServiceFromRequest(req *CreatePodRequest) (*corev1.Pod, *corev1.Service, error) {
 	clientset, err := initK8sClient()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	pod := &corev1.Pod{
@@ -1335,19 +1335,50 @@ func createPodFromRequest(req *CreatePodRequest) (*corev1.Pod, error) {
 					Command: req.Command,
 					Args:    req.Args,
 					Env:     mapToEnvVars(req.Env),
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: req.ContainerPort,
+						},
+					},
 				},
 			},
 			RestartPolicy: corev1.RestartPolicyAlways,
 		},
 	}
 
-	return clientset.CoreV1().
-		Pods(req.Namespace).
-		Create(context.Background(), pod, metav1.CreateOptions{})
+	pod, err = clientset.CoreV1().Pods(req.Namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create pod: %w", err)
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.PodName + "-svc",
+			Namespace: req.Namespace,
+			Labels:    req.Labels,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: req.Labels,
+			Ports: []corev1.ServicePort{
+				{
+					Port:       req.ContainerPort,
+					TargetPort: intstr.FromInt(int(req.ContainerPort)),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+			Type: corev1.ServiceTypeNodePort,
+		},
+	}
+
+	svc, err = clientset.CoreV1().Services(req.Namespace).Create(context.Background(), svc, metav1.CreateOptions{})
+	if err != nil {
+		return pod, nil, fmt.Errorf("failed to create service: %w", err)
+	}
+
+	return pod, svc, nil
 }
 
-// HTTP‑хендлер
-func handleCreatePod(w http.ResponseWriter, r *http.Request) {
+func handleCreatePodAndService(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -1363,16 +1394,28 @@ func handleCreatePod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pod, err := createPodFromRequest(&req)
+	pod, svc, err := createPodAndServiceFromRequest(&req)
 	if err != nil {
-		http.Error(w, "Failed to create pod: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Failed to create pod or service: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	resp := CreatePodResponse{
-		Name:      pod.Name,
-		Namespace: pod.Namespace,
-		Phase:     string(pod.Status.Phase),
+	resp := struct {
+		PodName     string `json:"podName"`
+		Namespace   string `json:"namespace"`
+		PodPhase    string `json:"podPhase"`
+		ServiceName string `json:"serviceName"`
+		NodePort    int32  `json:"nodePort,omitempty"`
+	}{
+		PodName:     pod.Name,
+		Namespace:   pod.Namespace,
+		PodPhase:    string(pod.Status.Phase),
+		ServiceName: svc.Name,
+		NodePort:    0,
+	}
+
+	if len(svc.Spec.Ports) > 0 {
+		resp.NodePort = svc.Spec.Ports[0].NodePort
 	}
 
 	w.Header().Set("Content-Type", "application/json")
