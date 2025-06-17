@@ -535,7 +535,7 @@ const DashboardForMain = () => {
               '{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}',
             onConfirm: async (buildJson) => {
               try {
-                buildParams = JSON.parse(buildJson);
+                buildParams = Text.parse(buildJson);
                 console.log('✅ Параметры билда:', buildParams);
               } catch (e) {
                 alert('❌ Неверный JSON: ' + e.message);
