@@ -461,10 +461,10 @@ const DashboardForMain = () => {
           return;
         }
       
-        if (serviceType === 'frontend') {
-          console.log('🟡 Начинаем создание frontend-сервиса...');
+        console.log('🟡 Начинаем создание', serviceType, '-сервиса...');
       
-          // Шаг 1: Build-параметры
+        // FRONTEND СЕРВИС — двойной prompt
+        if (serviceType === 'frontend') {
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
@@ -477,12 +477,12 @@ const DashboardForMain = () => {
                 buildParams = JSON.parse(buildJson);
                 console.log('✅ Параметры билда:', buildParams);
               } catch (e) {
-                alert('Неверный JSON: ' + e.message);
+                alert('❌ Неверный JSON: ' + e.message);
                 return;
               }
               setShowMessageBox(null);
       
-              // Шаг 2: Deploy-параметры
+              // DEPLOY JSON
               setShowMessageBox({
                 isOpen: true,
                 type: 'prompt',
@@ -495,14 +495,20 @@ const DashboardForMain = () => {
                     deployParams = JSON.parse(deployJson);
                     console.log('✅ Параметры деплоя:', deployParams);
                   } catch (e) {
-                    alert('Неверный JSON: ' + e.message);
+                    alert('❌ Неверный JSON: ' + e.message);
                     return;
                   }
                   setShowMessageBox(null);
       
+                  // API вызовы
                   try {
-                    // 🔧 ВАЖНО: передаём только buildParams
-                    await runProjectTask(currentProjectId, 'build', buildParams);
+                    const buildBody = {
+                      project_id: currentProjectId,
+                      task_type: 'build',
+                      params: buildParams,
+                    };
+                    console.log('📦 Отправка запроса билда:', buildBody);
+                    await runProjectTask(buildBody);
       
                     const podSpec = {
                       namespace: deployParams.namespace,
@@ -514,7 +520,7 @@ const DashboardForMain = () => {
                       args: [],
                       labels: deployParams.labels,
                     };
-      
+                    console.log('🚀 Создание пода и сервиса:', podSpec);
                     const result = await createPodAndService(currentProjectId, podSpec);
       
                     alert(`✅ Frontend задеплоен. NodePort: ${result.nodePort}`);
@@ -526,9 +532,9 @@ const DashboardForMain = () => {
                       deployParams.podName,
                       currentProjectId
                     );
-                    setNodes(ns => [...ns, newNode]);
+                    setNodes((ns) => [...ns, newNode]);
                   } catch (err) {
-                    console.error('❌ Ошибка во время билда/деплоя:', err);
+                    console.error('❌ Ошибка билда или деплоя:', err);
                     alert('Ошибка билда или деплоя: ' + err.message);
                   }
                 },
@@ -539,13 +545,13 @@ const DashboardForMain = () => {
             onCancel: () => setShowMessageBox(null),
             onClose: () => setShowMessageBox(null),
           });
-      
           return;
         }
       
-        // 🧩 Остальные типы сервисов
+        // ВСЕ ОСТАЛЬНЫЕ СЕРВИСЫ
         const position = { x: contextMenu.x, y: contextMenu.y };
         setContextMenu(null);
+      
         setShowMessageBox({
           isOpen: true,
           type: 'prompt',
@@ -563,7 +569,8 @@ const DashboardForMain = () => {
                 res = await createService(currentProjectId, serviceType, position);
               }
       
-              alert(`Сервис создан (ID ${res.serviceId || res.authServiceId})`);
+              alert(`✅ Сервис создан (ID ${res.serviceId || res.authServiceId})`);
+      
               const newNode = createReactFlowServiceNode(
                 res.serviceId || res.authServiceId,
                 serviceType,
@@ -571,14 +578,26 @@ const DashboardForMain = () => {
                 appName || res.name,
                 currentProjectId
               );
-              setNodes(ns => [...ns, newNode]);
+              setNodes((ns) => [...ns, newNode]);
             } catch (err) {
+              console.error('❌ Ошибка создания сервиса:', err);
               alert('Ошибка: ' + err.message);
             }
           },
           onCancel: () => setShowMessageBox(null),
         });
-      }, [currentProjectId, contextMenu, runProjectTask, createPodAndService, createService, createAuthService, setNodes]);
+      }, [
+        currentProjectId,
+        contextMenu,
+        runProjectTask,
+        createPodAndService,
+        createService,
+        createAuthService,
+        setNodes,
+        setContextMenu,
+        setShowMessageBox,
+      ]);
+      
       
       
       

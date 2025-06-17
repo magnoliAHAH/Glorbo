@@ -149,23 +149,19 @@ export const deleteService = async (serviceId, projectId) => {
     }
 };
 
-export async function runProjectTask(projectId, taskType, params) {
-  const body = {
-    project_id: Number(projectId),
-    task_type: taskType,
-    params,
-  };
-  const response = await fetch(
-    `${API_BASE_URL}/execute-task`, 
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify(body),
-    }
-  );
-  return handleResponse(response);
-}
+export async function runProjectTask(taskBody) {
+    const response = await fetch(
+      `${API_BASE_URL}/execute-task`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(taskBody),
+      }
+    );
+    return handleResponse(response);
+  }
+  
 
 export async function createPodAndService(projectId, podSpec) {
   // podSpec — это объект, например {
