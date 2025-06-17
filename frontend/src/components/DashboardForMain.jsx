@@ -466,6 +466,7 @@ const DashboardForMain = () => {
         if (serviceType === 'frontend') {
           let buildParams = null;
       
+          // Функция для запроса параметров деплоя и создания пода
           const askDeployParams = () => {
             setShowMessageBox({
               isOpen: true,
@@ -511,6 +512,9 @@ const DashboardForMain = () => {
                     currentProjectId
                   );
                   setNodes((ns) => [...ns, newNode]);
+      
+                  // Запускаем prompt заново для следующего пода
+                  askDeployParams();
                 } catch (err) {
                   console.error('❌ Ошибка деплоя:', err);
                   alert('Ошибка деплоя: ' + err.message);
@@ -521,7 +525,7 @@ const DashboardForMain = () => {
             });
           };
       
-          // Первый prompt — параметры сборки
+          // Запрос параметров сборки
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
@@ -548,7 +552,7 @@ const DashboardForMain = () => {
                 console.log('📦 Отправка запроса билда:', buildBody);
                 await runProjectTask(buildBody);
       
-                // После успешного билда — запрос параметров деплоя
+                // После успешного билда — запускаем prompt для создания пода
                 askDeployParams();
               } catch (err) {
                 console.error('❌ Ошибка билда:', err);
@@ -562,7 +566,7 @@ const DashboardForMain = () => {
           return;
         }
       
-        // Обработка остальных сервисов
+        // Логика для остальных сервисов без изменений
         const position = { x: contextMenu.x, y: contextMenu.y };
         setContextMenu(null);
       
@@ -611,6 +615,7 @@ const DashboardForMain = () => {
         setContextMenu,
         setShowMessageBox,
       ]);
+      
       
       
       
