@@ -466,7 +466,6 @@ const DashboardForMain = () => {
         if (serviceType === 'frontend') {
           let buildParams = null;
       
-          // Функция, которая показывает второй prompt с параметрами деплоя
           const askDeployParams = () => {
             setShowMessageBox({
               isOpen: true,
@@ -488,17 +487,6 @@ const DashboardForMain = () => {
                 setShowMessageBox(null);
       
                 try {
-                  // Отправляем задачу сборки
-                  const buildBody = {
-                    project_id: currentProjectId,
-                    task_type: 'build',
-                    params: buildParams,
-                  };
-                  console.log('📦 Отправка запроса билда:', buildBody);
-                  await runProjectTask(buildBody);
-                  console.log('✅ Билд завершён успешно');
-      
-                  // Формируем спецификацию пода и сервиса
                   const podSpec = {
                     namespace: deployParams.namespace,
                     podName: deployParams.podName,
@@ -511,8 +499,6 @@ const DashboardForMain = () => {
                   };
       
                   console.log('🚀 Создание пода и сервиса:', podSpec);
-      
-                  // Создаём под и сервис
                   const result = await createPodAndService(currentProjectId, podSpec);
       
                   alert(`✅ Frontend задеплоен. NodePort: ${result.nodePort}`);
@@ -526,8 +512,8 @@ const DashboardForMain = () => {
                   );
                   setNodes((ns) => [...ns, newNode]);
                 } catch (err) {
-                  console.error('❌ Ошибка билда или деплоя:', err);
-                  alert('Ошибка билда или деплоя: ' + (err.message || err));
+                  console.error('❌ Ошибка деплоя:', err);
+                  alert('Ошибка деплоя: ' + err.message);
                 }
               },
               onCancel: () => setShowMessageBox(null),
@@ -535,7 +521,7 @@ const DashboardForMain = () => {
             });
           };
       
-          // Первый prompt - параметры сборки
+          // Первый prompt — параметры сборки
           setShowMessageBox({
             isOpen: true,
             type: 'prompt',
@@ -543,7 +529,7 @@ const DashboardForMain = () => {
             message: 'Введите JSON с полями repo_url, branch, path, image_name, tag',
             placeholder:
               '{"repo_url":"https://...","branch":"main","path":"frontend","image_name":"test","tag":"main"}',
-            onConfirm: (buildJson) => {
+            onConfirm: async (buildJson) => {
               try {
                 buildParams = JSON.parse(buildJson);
                 console.log('✅ Параметры билда:', buildParams);
@@ -552,13 +538,25 @@ const DashboardForMain = () => {
                 return;
               }
               setShowMessageBox(null);
-              // После успешного ввода параметров билда - спрашиваем параметры деплоя
-              askDeployParams();
+      
+              try {
+                const buildBody = {
+                  project_id: currentProjectId,
+                  task_type: 'build',
+                  params: buildParams,
+                };
+                console.log('📦 Отправка запроса билда:', buildBody);
+                await runProjectTask(buildBody);
+      
+                // После успешного билда — запрос параметров деплоя
+                askDeployParams();
+              } catch (err) {
+                console.error('❌ Ошибка билда:', err);
+                alert('Ошибка билда: ' + err.message);
+              }
             },
             onCancel: () => setShowMessageBox(null),
-            onClose: () => {
-              // Если окно закрыли, не продолжаем
-            },
+            onClose: () => setShowMessageBox(null),
           });
       
           return;
@@ -597,7 +595,7 @@ const DashboardForMain = () => {
               setNodes((ns) => [...ns, newNode]);
             } catch (err) {
               console.error('❌ Ошибка создания сервиса:', err);
-              alert('Ошибка: ' + (err.message || err));
+              alert('Ошибка: ' + err.message);
             }
           },
           onCancel: () => setShowMessageBox(null),
@@ -613,6 +611,7 @@ const DashboardForMain = () => {
         setContextMenu,
         setShowMessageBox,
       ]);
+      
       
       
       
