@@ -159,8 +159,17 @@ export async function runProjectTask(taskBody) {
         body: JSON.stringify(taskBody),
       }
     );
-    return handleResponse(response);
+  
+    // Не парсим JSON, а получаем текст ответа
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || response.statusText);
+    }
+  
+    const text = await response.text();
+    return text;
   }
+  
   
 
 export async function createPodAndService(projectId, podSpec) {
