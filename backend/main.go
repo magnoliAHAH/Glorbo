@@ -184,6 +184,8 @@ func main() {
 
 	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePod))).Methods("POST", "OPTIONS")
 
+	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")
+
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -1375,4 +1377,52 @@ func handleCreatePod(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(resp)
+}
+
+type TaskRequest struct {
+	ProjectID int64             `json:"project_id"`
+	TaskType  string            `json:"task_type"` // например: "build", "lint", "analyze"
+	Params    map[string]string `json:"params"`    // любые параметры
+}
+
+func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(userIDKey).(string)
+
+	var req TaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("User %s requested task: %s for project %d with params: %+v", userID, req.TaskType, req.ProjectID, req.Params)
+
+	// Пример: в зависимости от типа задачи — выполняем определённую команду
+	switch req.TaskType {
+	case "build":
+		branch := req.Params["branch"]
+		if branch == "" {
+			http.Error(w, "Missing 'branch' param", http.StatusBadRequest)
+			return
+		}
+
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("cd /projects/%d && git checkout %s && make build", req.ProjectID, branch))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Build failed: %s", string(out)), http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte(fmt.Sprintf("Build succeeded:\n%s", string(out))))
+
+	case "lint":
+		cmd := exec.Command("sh", "-c", fmt.Sprintf("cd /projects/%d && make lint", req.ProjectID))
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Lint failed: %s", string(out)), http.StatusInternalServerError)
+			return
+		}
+		w.Write([]byte(fmt.Sprintf("Lint passed:\n%s", string(out))))
+
+	default:
+		http.Error(w, "Unknown task_type", http.StatusBadRequest)
+	}
 }
