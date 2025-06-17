@@ -1412,7 +1412,6 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Создаем клиент Kubernetes (предполагается, что сервис запущен внутри кластера)
 		config, err := rest.InClusterConfig()
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to get Kubernetes in-cluster config: %v", err), http.StatusInternalServerError)
@@ -1426,37 +1425,65 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 
 		jobName := fmt.Sprintf("kaniko-build-%d-%d", req.ProjectID, time.Now().Unix())
 		fullImage := fmt.Sprintf("registry.registry.svc.cluster.local:5000/%s:%s", imageName, tag)
+		namespace := "default" // поменяй, если нужно
 
 		job := &batchv1.Job{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: jobName,
+				Name:      jobName,
+				Namespace: namespace,
 			},
 			Spec: batchv1.JobSpec{
 				BackoffLimit: int32Ptr(0),
 				Template: corev1.PodTemplateSpec{
 					Spec: corev1.PodSpec{
-						RestartPolicy: corev1.RestartPolicyNever,
+						RestartPolicy:                 corev1.RestartPolicyNever,
+						TerminationGracePeriodSeconds: int64Ptr(0),
 						Containers: []corev1.Container{
 							{
 								Name:  "kaniko",
 								Image: "gcr.io/kaniko-project/executor:latest",
 								Args: []string{
-									fmt.Sprintf("--context=git://%s#%s", strings.TrimPrefix(repoURL, "https://"), branch),
+									fmt.Sprintf("--context=git://%s#%s:%s", strings.TrimPrefix(repoURL, "https://"), branch, path),
 									fmt.Sprintf("--dockerfile=%s/Dockerfile", path),
 									fmt.Sprintf("--destination=%s", fullImage),
 									"--insecure",
 									"--insecure-pull",
 									"--insecure-registry=registry.registry.svc.cluster.local:5000",
 								},
+								// Пример, если нужен volumeMount для секрета docker registry
+								/*
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "kaniko-secret",
+											MountPath: "/kaniko/.docker",
+										},
+									},
+								*/
 							},
 						},
+						// Пример, если нужен volume для секрета docker registry
+						/*
+							Volumes: []corev1.Volume{
+								{
+									Name: "kaniko-secret",
+									VolumeSource: corev1.VolumeSource{
+										Secret: &corev1.SecretVolumeSource{
+											SecretName: "regcred",
+										},
+									},
+								},
+							},
+						*/
+						ServiceAccountName: "default",
 					},
 				},
 			},
 		}
 
-		// Создаем Job в namespace default (замени на нужный, если нужно)
-		_, err = clientset.BatchV1().Jobs("default").Create(context.Background(), job, metav1.CreateOptions{})
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		_, err = clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to create Kaniko build job: %v", err), http.StatusInternalServerError)
 			return
@@ -1468,3 +1495,5 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unknown task_type", http.StatusBadRequest)
 	}
 }
+
+func int64Ptr(i int64) *int64 { return &i }
