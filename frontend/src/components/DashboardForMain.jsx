@@ -12,6 +12,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
+import MessageBox from './MessageBox';
+
 // Импорты API и утилит
 import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
@@ -251,6 +253,8 @@ const DashboardForMain = () => {
 
     const [contextMenu, setContextMenu] = useState(null);
 
+    const [showMessageBox, setShowMessageBox] = useState(null);
+
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
 
@@ -422,9 +426,17 @@ const DashboardForMain = () => {
     // Обработчик для создания нового сервиса
     const handleCreateService = useCallback(async (serviceType) => {
         if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-            alert('Project ID not found or is invalid. Cannot create service.');
+            setShowMessageBox({
+                isOpen: true,
+                type: 'alert',
+                title: 'Ошибка',
+                message: 'ID проекта не найден или недействителен. Невозможно создать сервис.',
+                onClose: () => {
+                    setShowMessageBox(null);
+                    setContextMenu(null); // Close context menu
+                }
+            });
             console.error('Project ID is invalid for service creation:', currentProjectId);
-            setContextMenu(null);
             return;
         }
 
@@ -432,27 +444,73 @@ const DashboardForMain = () => {
 
         try {
             if (serviceType === 'authentication') {
-                const appName = prompt('Enter a name for the authentication service (e.g., "Google Auth", "Auth0"):');
-                if (!appName) {
-                    alert('Authentication service name cannot be empty.');
-                    return;
-                }
-                const result = await createAuthService(currentProjectId, appName);
-                alert(`Authentication service "${appName}" created with ID: ${result.authServiceId}`);
-                console.log('Created Auth Service:', result);
+                // Use MessageBox as 'prompt' to get the appName
+                setShowMessageBox({
+                    isOpen: true,
+                    type: 'prompt',
+                    title: 'Имя службы аутентификации',
+                    message: 'Введите имя для службы аутентификации (например, "Google Auth", "Auth0"):',
+                    placeholder: 'Имя службы',
+                    onConfirm: async (appName) => {
+                        setShowMessageBox(null); // Close prompt box immediately
+                        if (!appName || !appName.trim()) {
+                            setShowMessageBox({
+                                isOpen: true,
+                                type: 'alert',
+                                title: 'Ошибка ввода',
+                                message: 'Имя службы аутентификации не может быть пустым.',
+                                onClose: () => setShowMessageBox(null)
+                            });
+                            return;
+                        }
+                        try {
+                            const result = await createAuthService(currentProjectId, appName.trim());
+                            setShowMessageBox({
+                                isOpen: true,
+                                type: 'alert',
+                                title: 'Сервис создан',
+                                message: `Служба аутентификации "${appName.trim()}" создана с ID: ${result.authServiceId}`,
+                                onClose: () => setShowMessageBox(null)
+                            });
+                            console.log('Created Auth Service:', result);
 
-                const newAuthServiceNode = createReactFlowServiceNode(
-                    `auth-${result.authServiceId}`,
-                    'authentication',
-                    position,
-                    appName,
-                    currentProjectId
-                );
-                setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
+                            const newAuthServiceNode = createReactFlowServiceNode(
+                                `auth-${result.authServiceId}`,
+                                'authentication',
+                                position,
+                                appName.trim(),
+                                currentProjectId
+                            );
+                            setNodes((prevNodes) => [...prevNodes, newAuthServiceNode]);
+                        } catch (error) {
+                            console.error('Не удалось создать службу аутентификации:', error.message);
+                            setShowMessageBox({
+                                isOpen: true,
+                                type: 'alert',
+                                title: 'Ошибка создания',
+                                message: `Не удалось создать службу аутентификации: ${error.message}`,
+                                onClose: () => setShowMessageBox(null)
+                            });
+                        } finally {
+                            setContextMenu(null); // Ensure context menu is closed after all operations
+                        }
+                    },
+                    onCancel: () => {
+                        setShowMessageBox(null); // Close prompt box if cancelled
+                        setContextMenu(null); // Close context menu if prompt is cancelled
+                    }
+                });
 
             } else {
+                // For non-authentication services, proceed directly as no name prompt is needed
                 const result = await createService(currentProjectId, serviceType, position);
-                alert(`Service created: ${result.serviceId}`);
+                setShowMessageBox({
+                    isOpen: true,
+                    type: 'alert',
+                    title: 'Сервис создан',
+                    message: `Сервис создан: ${result.serviceId}`,
+                    onClose: () => setShowMessageBox(null)
+                });
                 console.log('Created Service:', result);
 
                 const newNode = createReactFlowServiceNode(
@@ -465,9 +523,19 @@ const DashboardForMain = () => {
                 setNodes((prevNodes) => [...prevNodes, newNode]);
             }
         } catch (error) {
+            // This catch block will primarily handle errors from createService for non-auth types
+            // and possibly other unexpected errors. Auth service errors are handled inside its specific try/catch.
             console.error('Failed to create service:', error.message);
-            alert(`Failed to create service: ${error.message}`);
+            setShowMessageBox({
+                isOpen: true,
+                type: 'alert',
+                title: 'Ошибка создания',
+                message: `Не удалось создать сервис: ${error.message}`,
+                onClose: () => setShowMessageBox(null)
+            });
         } finally {
+            // Note: setContextMenu(null) might be called twice if auth service is handled.
+            // This is generally harmless, but ensures it closes.
             setContextMenu(null);
         }
     }, [currentProjectId, contextMenu, setNodes]);
@@ -530,11 +598,24 @@ const DashboardForMain = () => {
                 onClose={() => setIsSidebarOpen(false)}
                 onDeleteNode={handleDeleteNode}
             />
+            {showMessageBox && (
+                <MessageBox
+                    isOpen={showMessageBox.isOpen}
+                    type={showMessageBox.type}
+                    title={showMessageBox.title}
+                    message={showMessageBox.message}
+                    placeholder={showMessageBox.placeholder}
+                    onConfirm={showMessageBox.onConfirm}
+                    onCancel={showMessageBox.onCancel}
+                    onClose={showMessageBox.onClose}
+                />
+            )}
         </Page>
     );
 };
 
 export default DashboardForMain;
+
 
 // --- STYLES ---
 
