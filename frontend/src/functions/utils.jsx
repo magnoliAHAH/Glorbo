@@ -156,6 +156,7 @@ const normalizeFileNodeData = (node) => {
     }
 
     // Рекурсивно обрабатываем детей
+    // ИЗМЕНЕНИЕ ЗДЕСЬ: Вызов самой себя normalizeFileNodeData(child), а не несуществующей recursivelyNormalizeFileNode
     if (newNode.Children && Array.isArray(newNode.Children)) {
         newNode.Children = newNode.Children.map(child => normalizeFileNodeData(child));
     }
