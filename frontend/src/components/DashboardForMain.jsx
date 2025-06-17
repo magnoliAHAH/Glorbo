@@ -15,7 +15,7 @@ import 'reactflow/dist/style.css';
 import MessageBox from './MessageBox';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createPodAndService, runProjectTask } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
