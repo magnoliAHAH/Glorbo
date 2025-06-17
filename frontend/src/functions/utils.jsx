@@ -106,7 +106,7 @@ export function createReactFlowServiceNode(id, serviceType, position, name, proj
  * @returns {JSX.Element | null} JSX-элемент для отображения узла и его дочерних элементов.
  */
 export function renderFileNodeForSidebar(node, depth = 0) {
-    if (!node) return null; // Защита от пустого узла
+    if (!node) return null;
 
     const indent = depth * 20;
 
@@ -115,39 +115,37 @@ export function renderFileNodeForSidebar(node, depth = 0) {
         padding: '5px',
         borderLeft: depth > 0 ? '1px solid #ccc' : 'none',
         marginBottom: '2px',
-        backgroundColor: 'rgba(255,255,255,0.05)', // Легкий фон для узлов
+        backgroundColor: `rgba(255,255,255,${0.03 + depth * 0.01})`,
         borderRadius: '3px'
     };
 
-    let icon = '📄'; // Иконка по умолчанию для файла
-    let typeText = node.type; // Текст типа
-    let details = []; // Дополнительные детали для отображения
+    let icon = '📄';
+    let typeText = node.type;
+    let details = [];
 
-    // Определяем иконку, тип и детали в зависимости от типа узла
     if (node.type === 'folder') {
         icon = '📁';
         typeText = 'Folder';
     } else if (node.type === 'service') {
         icon = '🚀';
-        typeText = `Service`;
-        details.push(<div key="s-type">**Type:** {node.serviceType || 'N/A'}</div>);
-        if (node.status) details.push(<div key="s-status">**Status:** {node.status}</div>);
-        if (node.position) details.push(<div key="s-pos">**Position:** ({node.position.x?.toFixed(0)}, {node.position.y?.toFixed(0)})</div>);
-        if (node.version) details.push(<div key="s-version">**Version:** {node.version}</div>);
-        if (node.volume) details.push(<div key="s-volume">**Volume:** {node.volume}</div>);
-        // Если сервис содержит projectId в своих данных, отобразим его
-        if (node.projectId) details.push(<div key="s-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
-
+        typeText = 'Service';
+        if (node.serviceType) details.push(<div key="s-type"><strong>Type:</strong> {node.serviceType}</div>);
+        if (node.status) details.push(<div key="s-status"><strong>Status:</strong> {node.status}</div>);
+        if (node.position) details.push(
+            <div key="s-pos"><strong>Position:</strong> ({node.position.x?.toFixed(0)}, {node.position.y?.toFixed(0)})</div>
+        );
+        if (node.version) details.push(<div key="s-version"><strong>Version:</strong> {node.version}</div>);
+        if (node.volume) details.push(<div key="s-volume"><strong>Volume:</strong> {node.volume}</div>);
+        if (node.projectId?.Valid) details.push(<div key="s-proj"><strong>Project ID:</strong> {node.projectId.Int64}</div>);
     } else if (node.type === 'repo') {
         icon = '📦';
         typeText = 'Repository';
-        details.push(<div key="r-url">**URL:** {node.url || 'N/A'}</div>); // <--- ИЗМЕНИТЬ ЗДЕСЬ
-        if (node.projectId) details.push(<div key="r-proj">**Project ID:** {node.projectId || 'N/A'}</div>);
+        if (node.url) details.push(<div key="r-url"><strong>URL:</strong> {node.url}</div>);
+        if (node.projectId?.Valid) details.push(<div key="r-proj"><strong>Project ID:</strong> {node.projectId.Int64}</div>);
     } else if (node.type === 'file') {
         typeText = 'File';
-        if (node.size) details.push(<div key="f-size">**Size:** {node.size}</div>);
+        if (node.size) details.push(<div key="f-size"><strong>Size:</strong> {node.size}</div>);
     }
-
 
     return (
         <div key={node.id} style={nodeStyle}>
@@ -158,7 +156,6 @@ export function renderFileNodeForSidebar(node, depth = 0) {
                     {details}
                 </div>
             )}
-            {/* Рекурсивно рендерим дочерние элементы */}
             {node.children && node.children.length > 0 && (
                 <div style={{ paddingLeft: '10px' }}>
                     {node.children.map(child => renderFileNodeForSidebar(child, depth + 1))}
@@ -167,6 +164,7 @@ export function renderFileNodeForSidebar(node, depth = 0) {
         </div>
     );
 }
+
 
 /**
  * Вспомогательная функция для плоского отображения информации о сервисе (для сайдбара).
