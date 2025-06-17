@@ -13,6 +13,7 @@ spec:
       labels:
         app: backend
     spec:
+      serviceAccountName: glorbo-deployer # <— вот сюда!
       containers:
         - name: backend
           image: mixail.ermin33.fvds.ru:31339/glorbo-backend:IMAGE_TAG

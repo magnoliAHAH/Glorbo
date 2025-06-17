@@ -99,6 +99,9 @@ jobs:
             sed -i "s|image: $REGISTRY_URL/glorbo-backend:.*|image: $REGISTRY_URL/glorbo-backend:$VERSION|" Glorbo/k3s-setup/backend-deploy.yaml
             sed -i "s|image: $REGISTRY_URL/glorbo-frontend:.*|image: $REGISTRY_URL/glorbo-frontend:$VERSION|" Glorbo/k3s-setup/frontend-deploy.yaml
 
+            kubectl apply -f Glorbo/k3s-setup/backend-service-acc.yaml -n $KUBERNETES_NAMESPACE
+            kubectl apply -f Glorbo/k3s-setup/backend-cluster-role.yaml -n $KUBERNETES_NAMESPACE
+
             kubectl apply -f Glorbo/k3s-setup/backend-deploy.yaml -n $KUBERNETES_NAMESPACE
             kubectl rollout status deployment/backend -n $KUBERNETES_NAMESPACE
 
