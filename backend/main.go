@@ -455,7 +455,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Проверка авторизации
+	// Авторизация
 	if r.Context().Value(userIDKey) == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -468,7 +468,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		Position    *Position `json:"position"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 	if req.ProjectID == 0 || req.ServiceType == "" {
@@ -497,17 +497,35 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Инициализируем k8s клиент in-cluster
+	// Инициализируем in-cluster k8s-клиент
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		log.Printf("k8s config: %v", err)
+		log.Printf("k8s config error: %v", err)
 	} else if clientset, err := kubernetes.NewForConfig(cfg); err != nil {
-		log.Printf("k8s client: %v", err)
+		log.Printf("k8s client error: %v", err)
 	} else {
+		nsName := fmt.Sprintf("project-%d", req.ProjectID)
+
+		// 1) убедиться, что namespace существует
+		if _, err := clientset.CoreV1().Namespaces().Get(context.TODO(), nsName, metav1.GetOptions{}); err != nil {
+			// если не нашли — создаём
+			ns := &v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: nsName,
+				},
+			}
+			if _, err := clientset.CoreV1().
+				Namespaces().
+				Create(context.TODO(), ns, metav1.CreateOptions{}); err != nil {
+				log.Printf("Failed to create namespace %s: %v", nsName, err)
+			}
+		}
+
+		// 2) создаём Pod в этом namespace
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      serviceName,
-				Namespace: "glorbo-app",
+				Namespace: nsName,
 				Labels:    map[string]string{"app": req.ServiceType},
 			},
 			Spec: v1.PodSpec{
@@ -519,9 +537,9 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		if _, err := clientset.CoreV1().
-			Pods("glorbo-app").
+			Pods(nsName).
 			Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
-			log.Printf("Failed to create Pod %s: %v", serviceName, err)
+			log.Printf("Failed to create Pod %s in namespace %s: %v", serviceName, nsName, err)
 		}
 	}
 
@@ -531,6 +549,7 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 		"message":   "Service created and nginx pod launched",
 		"serviceId": serviceID,
 		"name":      serviceName,
+		"namespace": fmt.Sprintf("project-%d", req.ProjectID),
 	})
 }
 
