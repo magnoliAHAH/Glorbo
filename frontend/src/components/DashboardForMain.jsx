@@ -180,38 +180,37 @@ const SidebarContent = styled.div`
 
 const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
     const isServiceNode = content?.type === 'serviceNode';
-
+  
     return (
-        <SidebarWrapper isOpen={isOpen}>
-            <SidebarHeader>
-                <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
-                <CloseButton onClick={onClose}>X</CloseButton>
-            </SidebarHeader>
-            <SidebarContent>
-                {content ? (
-                    content.type === 'repo' ? (
-                        renderFileNodeForSidebar(content)
-                    ) : (
-                        renderServiceInfoForSidebar(content)
-                    )
-                ) : (
-                    <p>Select a node to view its details.</p>
-                )}
-
-                {isServiceNode && content?.id && typeof content?.projectId === 'number' && (
-                    <DeleteServiceButton
-                        serviceId={content.id}
-                        projectId={content.projectId}
-                        onDeleted={(deletedServiceId) => {
-                            onDeleteNode?.(deletedServiceId, content.projectId);
-                            onClose();
-                        }}
-                    />
-                )}
-            </SidebarContent>
-        </SidebarWrapper>
+      <SidebarWrapper isOpen={isOpen}>
+        <SidebarHeader>
+          <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
+          <CloseButton onClick={onClose}>X</CloseButton>
+        </SidebarHeader>
+        <SidebarContent>
+          {content ? (
+            content.type === 'repo'
+              ? renderFileNodeForSidebar(content)
+              : renderServiceInfoForSidebar(content)
+          ) : (
+            <p>Select a node to view its details.</p>
+          )}
+  
+          {/* Вот здесь добавляем кнопку удаления */}
+          {isServiceNode && content.id && typeof content.projectId === 'number' && (
+            <DeleteServiceButton
+              serviceId={content.id}
+              projectId={content.projectId}
+              onDeleted={(deletedId) => {
+                onDeleteNode(deletedId);
+                onClose();
+              }}
+            />
+          )}
+        </SidebarContent>
+      </SidebarWrapper>
     );
-};
+  };
 
 
 // --- Context Menu Component --- (без изменений)
