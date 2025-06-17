@@ -22,7 +22,7 @@ const MessageBoxOverlay = styled.div`
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 2000; /* Выше, чем все остальные модальные окна */
+    z-index: 2000;
     animation: ${fadeIn} 0.15s ease-out;
 `;
 
@@ -58,7 +58,7 @@ const Input = styled.input`
     border: 1px solid #ddd;
     border-radius: 5px;
     font-size: 1em;
-    box-sizing: border-box; /* Для корректного расчета ширины */
+    box-sizing: border-box;
 `;
 
 const ButtonContainer = styled.div`
@@ -113,9 +113,9 @@ const Button = styled.button`
  * @param {string} props.type - Тип сообщения: 'alert', 'confirm', 'prompt'.
  * @param {string} props.title - Заголовок сообщения.
  * @param {string} props.message - Основной текст сообщения.
- * @param {string} [props.placeholder] - Плейсхолдер для поля ввода (только для type='prompt').
- * @param {function} [props.onConfirm] - Колбэк при подтверждении (для 'confirm', 'prompt'). Принимает введенное значение для 'prompt'.
- * @param {function} [props.onCancel] - Колбэк при отмене (для 'confirm', 'prompt').
+ * @param {string} [props.placeholder] - Плейсхолдер для поля ввода (только для 'prompt').
+ * @param {function} [props.onConfirm] - Колбэк при подтверждении.
+ * @param {function} [props.onCancel] - Колбэк при отмене.
  * @param {function} [props.onClose] - Колбэк при закрытии (для 'alert').
  */
 const MessageBox = ({ isOpen, type, title, message, placeholder, onConfirm, onCancel, onClose }) => {
@@ -123,32 +123,33 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, onConfirm, onCa
 
     useEffect(() => {
         if (isOpen && type === 'prompt') {
-            setInputValue(''); // Сбрасываем значение при открытии для prompt
+            setInputValue(''); // сброс при открытии prompt
         }
     }, [isOpen, type]);
 
-    if (!isOpen) {
-        return null;
-    }
+    if (!isOpen) return null;
 
     const handleConfirm = () => {
         if (type === 'prompt') {
             onConfirm && onConfirm(inputValue);
+            // Для prompt закрываем только через onClose
+            onClose && onClose();
         } else {
             onConfirm && onConfirm();
+            // Для alert/confirm закрываем через общий механизм
+            onCloseInternal();
         }
-        onCloseInternal();
     };
 
     const handleCancel = () => {
         onCancel && onCancel();
-        onCloseInternal();
+        // При отмене закрываем через onClose
+        onClose && onClose();
     };
 
     const onCloseInternal = () => {
-        onClose && onClose(); // Для alert
-        onCancel && onCancel(); // Для confirm/prompt при клике на оверлей
-    }
+        onClose && onClose();
+    };
 
     const hasInput = type === 'prompt';
 
@@ -162,23 +163,21 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, onConfirm, onCa
                         type="text"
                         placeholder={placeholder}
                         value={inputValue}
-                        onChange={(e) => setInputValue(e.target.value)}
-                        autoFocus // Фокус на поле ввода
+                        onChange={e => setInputValue(e.target.value)}
+                        autoFocus
                     />
                 )}
                 <ButtonContainer>
-                    {type === 'confirm' && (
+                    {(type === 'confirm' || type === 'prompt') && (
                         <Button className="secondary" onClick={handleCancel}>
                             Отмена
                         </Button>
                     )}
-                    {type === 'prompt' && (
-                        <Button className="secondary" onClick={handleCancel}>
-                            Отмена
-                        </Button>
-                    )}
-                    <Button className={type === 'confirm' ? 'danger' : 'primary'} onClick={handleConfirm}>
-                        {type === 'alert' ? 'ОК' : (type === 'confirm' ? 'Подтвердить' : 'Создать')}
+                    <Button
+                        className={type === 'confirm' ? 'danger' : 'primary'}
+                        onClick={handleConfirm}
+                    >
+                        {type === 'alert' ? 'OK' : (type === 'confirm' ? 'Подтвердить' : 'Создать')}
                     </Button>
                 </ButtonContainer>
             </MessageBoxContent>

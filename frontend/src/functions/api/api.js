@@ -156,7 +156,7 @@ export async function runProjectTask(projectId, taskType, params) {
     params,
   };
   const response = await fetch(
-    `${API_BASE_URL}/projects/${projectId}/tasks`, 
+    `${API_BASE_URL}/execute-task`, 
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
