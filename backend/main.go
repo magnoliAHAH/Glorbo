@@ -24,6 +24,13 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // Глобальные переменные для подключения к БД и gRPC клиента
@@ -102,6 +109,8 @@ func init() {
 	prometheus.MustRegister(requestsTotal)
 }
 
+var k8sClient *kubernetes.Clientset
+
 // initDB инициализирует подключение к базе данных PostgreSQL
 func initDB() {
 	var err error
@@ -170,6 +179,8 @@ func main() {
 		"/api/projects/{project_id}/users",
 		WithAuth(http.HandlerFunc(getUsersHandler)),
 	).Methods("GET", "OPTIONS")
+
+	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePod))).Methods("POST", "OPTIONS")
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
@@ -1169,4 +1180,113 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Service deleted successfully",
 	})
+}
+
+type CreatePodRequest struct {
+	Namespace string            `json:"namespace"`     // куда создавать
+	PodName   string            `json:"podName"`       // имя Pod
+	Image     string            `json:"image"`         // образ контейнера
+	Env       map[string]string `json:"env,omitempty"` // переменные окружения
+	Command   []string          `json:"command,omitempty"`
+	Args      []string          `json:"args,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+}
+
+type CreatePodResponse struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Phase     string `json:"phase"`
+}
+
+func homeDir() string {
+	if h, err := os.UserHomeDir(); err == nil {
+		return h
+	}
+	return ""
+}
+
+func initK8sClient() (*kubernetes.Clientset, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		kubeconfig := filepath.Join(homeDir(), ".kube", "config")
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return kubernetes.NewForConfig(config)
+}
+
+func mapToEnvVars(m map[string]string) []v1.EnvVar {
+	env := make([]v1.EnvVar, 0, len(m))
+	for k, v := range m {
+		env = append(env, v1.EnvVar{Name: k, Value: v})
+	}
+	return env
+}
+
+// createPodFromRequest собирает и создаёт Pod по данным из CreatePodRequest
+func createPodFromRequest(req *CreatePodRequest) (*v1.Pod, error) {
+	clientset, err := initK8sClient()
+	if err != nil {
+		return nil, err
+	}
+
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      req.PodName,
+			Namespace: req.Namespace,
+			Labels:    req.Labels,
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{
+				{
+					Name:    req.PodName,
+					Image:   req.Image,
+					Command: req.Command,
+					Args:    req.Args,
+					Env:     mapToEnvVars(req.Env),
+				},
+			},
+			RestartPolicy: v1.RestartPolicyAlways,
+		},
+	}
+
+	return clientset.CoreV1().
+		Pods(req.Namespace).
+		Create(context.Background(), pod, metav1.CreateOptions{})
+}
+
+// HTTP‑хендлер
+func handleCreatePod(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CreatePodRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	pod, err := createPodFromRequest(&req)
+	if err != nil {
+		http.Error(w, "Failed to create pod: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	resp := CreatePodResponse{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
+		Phase:     string(pod.Status.Phase),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
 }
