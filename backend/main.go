@@ -449,93 +449,86 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
 
+	requestsTotal.WithLabelValues("/api/create-service", r.Method).Inc()
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
 
-	// проверка auth …
-	raw := r.Context().Value(userIDKey)
-	if raw == nil {
+	// Проверка авторизации
+	if r.Context().Value(userIDKey) == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	// парсим тело
+	// Парсим тело
 	var req struct {
-		ProjectID   int64             `json:"projectId"`
-		ServiceType string            `json:"serviceType"`
-		Position    *Position         `json:"position,omitempty"`
-		Image       string            `json:"image"`         // добавляем поле image
-		Env         map[string]string `json:"env,omitempty"` // и env
+		ProjectID   int64     `json:"projectId"`
+		ServiceType string    `json:"serviceType"`
+		Position    *Position `json:"position"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.ProjectID == 0 || req.ServiceType == "" || req.Image == "" {
-		http.Error(w, "projectId, serviceType and image are required", http.StatusBadRequest)
+	if req.ProjectID == 0 || req.ServiceType == "" {
+		http.Error(w, "projectId and serviceType are required", http.StatusBadRequest)
 		return
 	}
 	if req.Position == nil {
 		req.Position = &Position{X: 0, Y: 0}
 	}
 
-	// генерируем ID и имя
+	// Генерируем ID и имя
 	serviceID := generateUUID()
 	serviceName := fmt.Sprintf("%s-service-%s", req.ServiceType, serviceID[:4])
 	servicePath := strings.ToLower(req.ServiceType)
 
-	// записываем в БД
-	_, err := db.Exec(`
+	// Вставляем в БД
+	if _, err := db.Exec(`
         INSERT INTO services
           (id, project_id, name, type, status, volume, version, path, position_x, position_y)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 		serviceID, req.ProjectID, serviceName, req.ServiceType,
-		"pending", "", "", servicePath,
-		req.Position.X, req.Position.Y,
-	)
-	if err != nil {
+		"pending", "", "", servicePath, req.Position.X, req.Position.Y,
+	); err != nil {
 		log.Printf("DB insert failed: %v", err)
-		http.Error(w, "DB error", http.StatusInternalServerError)
+		http.Error(w, "Failed to create service", http.StatusInternalServerError)
 		return
 	}
 
-	// --- здесь создаём Pod в k8s ---
-	clientset, err := initK8sClient()
+	// Инициализируем k8s клиент in-cluster
+	cfg, err := rest.InClusterConfig()
 	if err != nil {
-		log.Printf("k8s init client: %v", err)
-		// не фатально — просто логируем и продолжаем
+		log.Printf("k8s config: %v", err)
+	} else if clientset, err := kubernetes.NewForConfig(cfg); err != nil {
+		log.Printf("k8s client: %v", err)
 	} else {
 		pod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      serviceName,
-				Namespace: "glorbo-app", // можно взять из req.Namespace, если добавите
+				Namespace: "glorbo-app",
 				Labels:    map[string]string{"app": req.ServiceType},
 			},
 			Spec: v1.PodSpec{
-				Containers: []v1.Container{
-					{
-						Name:  serviceName,
-						Image: req.Image,
-						Env:   mapToEnvVars(req.Env),
-					},
-				},
+				Containers: []v1.Container{{
+					Name:  serviceName,
+					Image: "nginx:latest",
+				}},
 				RestartPolicy: v1.RestartPolicyAlways,
 			},
 		}
 		if _, err := clientset.CoreV1().
 			Pods("glorbo-app").
 			Create(context.TODO(), pod, metav1.CreateOptions{}); err != nil {
-
 			log.Printf("Failed to create Pod %s: %v", serviceName, err)
 		}
 	}
 
-	// возвращаем ответ
+	// Ответ
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
-		"message":   "Service created and pod launched",
+		"message":   "Service created and nginx pod launched",
 		"serviceId": serviceID,
 		"name":      serviceName,
 	})
