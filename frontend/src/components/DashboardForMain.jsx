@@ -796,14 +796,15 @@ const DashboardForMain = () => {
             />
             {showMessageBox && (
                 <MessageBox
-                    isOpen={showMessageBox.isOpen}
-                    type={showMessageBox.type}
-                    title={showMessageBox.title}
-                    message={showMessageBox.message}
-                    placeholder={showMessageBox.placeholder}
-                    onConfirm={showMessageBox.onConfirm}
-                    onCancel={showMessageBox.onCancel}
-                    onClose={showMessageBox.onClose}
+                  isOpen={showMessageBox.isOpen}
+                  type={showMessageBox.type}
+                  title={showMessageBox.title}
+                  message={showMessageBox.message}
+                  placeholder={showMessageBox.placeholder}
+                  fields={showMessageBox.fields}
+                  onConfirm={showMessageBox.onConfirm}
+                  onCancel={showMessageBox.onCancel}
+                  onClose={showMessageBox.onClose}
                 />
             )}
         </Page>
