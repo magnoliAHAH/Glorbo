@@ -188,21 +188,12 @@ export async function createPodAndService(projectId, podSpec) {
   return handleResponse(response);
 }
 
-export async function createDeploymentAndService(projectId, deploymentSpec) {
-    const url = `${API_BASE_URL}/projects/${projectId}/deploys`;
-    console.log("Отправка запроса на:", url);
-    console.log("С данными:", deploymentSpec);
-  
-    const response = await fetch(url, {
+export async function createDeploymentAndService(projectId, body) {
+    const res = await fetch(`/api/projects/${projectId}/deploys`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        // Добавьте заголовок Authorization, если ваш API требует аутентификацию
-        // 'Authorization': 'Bearer YOUR_AUTH_TOKEN_HERE',
-      },
-      credentials: 'include', // Если используются куки для аутентификации
-      body: JSON.stringify(deploymentSpec),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
     });
-  
-    return handleResponse(response);
+    if (!res.ok) throw new Error(`createDeploymentAndService failed: ${res.statusText}`);
+    return res.json();
   }

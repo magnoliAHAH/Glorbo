@@ -484,11 +484,11 @@ const DashboardForMain = () => {
             console.error('Invalid projectId:', currentProjectId);
             return;
           }
-      
+        
           // 1) Запоминаем позицию и закрываем меню
           const position = { x: contextMenu.x, y: contextMenu.y };
           setContextMenu(null);
-      
+        
           // 2) Логика для frontend
           if (serviceType === 'frontend') {
             // 2.1) Форма параметров сборки
@@ -506,7 +506,7 @@ const DashboardForMain = () => {
               ],
               onConfirm: async buildFormData => {
                 setShowMessageBox(null);
-      
+        
                 const buildParams = {
                   repo_url:   buildFormData.repo_url.trim(),
                   branch:     buildFormData.branch.trim(),
@@ -514,7 +514,7 @@ const DashboardForMain = () => {
                   image_name: buildFormData.image_name.trim(),
                   tag:        buildFormData.tag.trim()
                 };
-      
+        
                 try {
                   console.log('📦 Сборка:', buildParams);
                   await runProjectTask({
@@ -533,7 +533,7 @@ const DashboardForMain = () => {
                   });
                   return;
                 }
-      
+        
                 // 2.2) Форма параметров деплоя
                 setShowMessageBox({
                   isOpen: true,
@@ -550,7 +550,7 @@ const DashboardForMain = () => {
                   ],
                   onConfirm: async deployFormData => {
                     setShowMessageBox(null);
-      
+        
                     const deploymentSpec = {
                       deploymentName: deployFormData.deploymentName.trim(),
                       image:          deployFormData.image.trim(),
@@ -559,7 +559,7 @@ const DashboardForMain = () => {
                       replicas:       Number(deployFormData.replicas),
                       volume:         deployFormData.volume.trim()
                     };
-      
+        
                     // полный payload для API
                     const payload = {
                       projectId:      currentProjectId,
@@ -569,11 +569,12 @@ const DashboardForMain = () => {
                       path:           buildParams.path,
                       position
                     };
-      
+        
                     try {
                       console.log('🚀 Деплой API:', payload);
-                      const result = await createDeploymentAndService(payload);
-      
+                      // Передаём сначала projectId, потом тело
+                      const result = await createDeploymentAndService(currentProjectId, payload);
+        
                       setShowMessageBox({
                         isOpen: true,
                         type: 'alert',
@@ -581,7 +582,7 @@ const DashboardForMain = () => {
                         message: `NodePort: ${result.nodePort}`,
                         onClose: () => setShowMessageBox(null)
                       });
-      
+        
                       const newNode = createReactFlowServiceNode(
                         payload.deploymentName,
                         'frontend',
@@ -594,7 +595,7 @@ const DashboardForMain = () => {
                         payload.path
                       );
                       setNodes(ns => [...ns, newNode]);
-      
+        
                     } catch (err) {
                       console.error('Ошибка деплоя:', err);
                       setShowMessageBox({
@@ -611,7 +612,7 @@ const DashboardForMain = () => {
               },
               onCancel: () => setShowMessageBox(null)
             });
-      
+        
           } else {
             // 3) Ветка для остальных сервисов
             setShowMessageBox({
@@ -649,7 +650,7 @@ const DashboardForMain = () => {
                   });
                   return;
                 }
-      
+        
                 try {
                   let result, id, displayName;
                   if (serviceType === 'authentication') {
@@ -669,7 +670,7 @@ const DashboardForMain = () => {
                     id = result.serviceId;
                     displayName = result.name;
                   }
-      
+        
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
@@ -677,7 +678,7 @@ const DashboardForMain = () => {
                     message: `ID: ${id}`,
                     onClose: () => setShowMessageBox(null)
                   });
-      
+        
                   const newNode = createReactFlowServiceNode(
                     id,
                     serviceType,
@@ -690,7 +691,7 @@ const DashboardForMain = () => {
                     repoPath
                   );
                   setNodes(ns => [...ns, newNode]);
-      
+        
                 } catch (err) {
                   console.error('Ошибка создания:', err);
                   setShowMessageBox({
@@ -705,7 +706,7 @@ const DashboardForMain = () => {
               onCancel: () => setShowMessageBox(null)
             });
           }
-      
+        
         }, [
           currentProjectId,
           currentRepoUrl,
@@ -714,6 +715,7 @@ const DashboardForMain = () => {
           setContextMenu,
           setNodes
         ]);
+        
          // Зависимости useCallback
         
       
