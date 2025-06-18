@@ -469,36 +469,36 @@ const DashboardForMain = () => {
         
         
         const handleCreateService = useCallback(async (serviceType) => {
-          // 0) Проверка projectId
+          // 0) Проверяем projectId
           if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
             setShowMessageBox({
               isOpen: true,
               type: 'alert',
               title: 'Ошибка',
-              message: 'ID проекта не найден или недействителен. Невозможно создать сервис.',
+              message: 'ID проекта недействителен. Невозможно создать сервис.',
               onClose: () => {
                 setShowMessageBox(null);
                 setContextMenu(null);
               }
             });
-            console.error('Project ID is invalid for service creation:', currentProjectId);
+            console.error('Invalid projectId:', currentProjectId);
             return;
           }
-        
-          // 1) Получаем позицию и закрываем контекстное меню
+      
+          // 1) Запоминаем позицию и закрываем меню
           const position = { x: contextMenu.x, y: contextMenu.y };
           setContextMenu(null);
-        
-          // 2) Ветка для frontend
+      
+          // 2) Логика для frontend
           if (serviceType === 'frontend') {
-            // 2.1) Форма для сбора параметров сборки
+            // 2.1) Форма параметров сборки
             setShowMessageBox({
               isOpen: true,
               type: 'form',
               title: 'Параметры сборки Frontend',
-              message: 'Введите параметры для сборки Docker-образа фронтенда:',
+              message: 'Введите параметры для сборки Docker-образа:',
               fields: [
-                { name: 'repo_url',   label: 'URL репозитория:',       type: 'text',     defaultValue: currentRepoUrl || '', placeholder: 'https://github.com/user/repo', autoFocus: true },
+                { name: 'repo_url',   label: 'URL репозитория:',       type: 'text',     defaultValue: currentRepoUrl || '', placeholder: 'https://github.com/…', autoFocus: true },
                 { name: 'branch',     label: 'Ветка:',                   type: 'text',     defaultValue: 'main', placeholder: 'main' },
                 { name: 'path',       label: 'Путь сборки:',             type: 'text',     defaultValue: 'frontend', placeholder: 'frontend/src' },
                 { name: 'image_name', label: 'Имя образа (Docker):',     type: 'text',     placeholder: 'my-frontend-app' },
@@ -506,202 +506,213 @@ const DashboardForMain = () => {
               ],
               onConfirm: async buildFormData => {
                 setShowMessageBox(null);
-        
+      
                 const buildParams = {
                   repo_url:   buildFormData.repo_url.trim(),
                   branch:     buildFormData.branch.trim(),
                   path:       buildFormData.path.trim(),
                   image_name: buildFormData.image_name.trim(),
-                  tag:        buildFormData.tag.trim(),
+                  tag:        buildFormData.tag.trim()
                 };
-        
+      
                 try {
-                  console.log('📦 Отправка запроса сборки:', buildParams);
+                  console.log('📦 Сборка:', buildParams);
                   await runProjectTask({
                     project_id: currentProjectId,
                     task_type:  'build',
-                    params:     buildParams,
+                    params:     buildParams
                   });
                 } catch (err) {
-                  console.error('❌ Ошибка сборки:', err);
+                  console.error('Ошибка сборки:', err);
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
                     title: 'Ошибка сборки',
-                    message: `Ошибка сборки: ${err.message}`,
+                    message: err.message,
                     onClose: () => setShowMessageBox(null)
                   });
                   return;
                 }
-        
-                // 2.2) Форма для сбора параметров деплоя
+      
+                // 2.2) Форма параметров деплоя
                 setShowMessageBox({
                   isOpen: true,
                   type: 'form',
                   title: 'Параметры деплоя Frontend',
-                  message: 'Введите параметры для развертывания пода и сервиса:',
+                  message: 'Введите параметры деплоя:',
                   fields: [
-                    { name: 'deploymentName', label: 'Deployment Name:',     type: 'text',   defaultValue: `my-${buildParams.image_name}-deploys`, autoFocus: true },
+                    { name: 'deploymentName', label: 'Deployment Name:',     type: 'text',   defaultValue: `my-${buildParams.image_name}-deploy` },
                     { name: 'image',          label: 'Image (полный путь):', type: 'text',   defaultValue: `mixail.ermin33.fvds.ru:31339/${buildParams.image_name}:${buildParams.tag}` },
                     { name: 'namespace',      label: 'Namespace:',           type: 'text',   defaultValue: `project-${currentProjectId}` },
                     { name: 'containerPort',  label: 'Container Port:',      type: 'number', defaultValue: 80 },
                     { name: 'replicas',       label: 'Replicas:',            type: 'number', defaultValue: 2 },
-                    { name: 'volume',         label: 'Volume (путь):',       type: 'text',   defaultValue: '/var/data' },
+                    { name: 'volume',         label: 'Volume (путь):',       type: 'text',   defaultValue: '/var/data' }
                   ],
                   onConfirm: async deployFormData => {
                     setShowMessageBox(null);
-        
+      
                     const deploymentSpec = {
                       deploymentName: deployFormData.deploymentName.trim(),
                       image:          deployFormData.image.trim(),
                       namespace:      deployFormData.namespace.trim(),
                       containerPort:  Number(deployFormData.containerPort),
                       replicas:       Number(deployFormData.replicas),
-                      volume:         deployFormData.volume.trim(),
+                      volume:         deployFormData.volume.trim()
                     };
-        
+      
+                    // полный payload для API
+                    const payload = {
+                      projectId:      currentProjectId,
+                      serviceType:    'frontend',
+                      ...deploymentSpec,
+                      version:        buildParams.tag,
+                      path:           buildParams.path,
+                      position
+                    };
+      
                     try {
-                      console.log('🚀 Деплой через createDeploymentAndService:', deploymentSpec);
-                      const result = await createDeploymentAndService(currentProjectId, deploymentSpec);
-        
+                      console.log('🚀 Деплой API:', payload);
+                      const result = await createDeploymentAndService(payload);
+      
                       setShowMessageBox({
                         isOpen: true,
                         type: 'alert',
                         title: 'Frontend задеплоен',
-                        message: `Frontend "${deploymentSpec.deploymentName}" задеплоен. NodePort: ${result.nodePort}`,
+                        message: `NodePort: ${result.nodePort}`,
                         onClose: () => setShowMessageBox(null)
                       });
-        
-                      // Добавляем узел в React Flow
+      
                       const newNode = createReactFlowServiceNode(
-                        deploymentSpec.deploymentName,
+                        payload.deploymentName,
                         'frontend',
                         position,
-                        deploymentSpec.deploymentName,
+                        payload.deploymentName,
                         currentProjectId,
                         'running',
-                        deploymentSpec.volume,
-                        buildFormData.tag,
-                        buildFormData.path
+                        payload.volume,
+                        payload.version,
+                        payload.path
                       );
                       setNodes(ns => [...ns, newNode]);
+      
                     } catch (err) {
-                      console.error('❌ Ошибка деплоя:', err);
+                      console.error('Ошибка деплоя:', err);
                       setShowMessageBox({
                         isOpen: true,
                         type: 'alert',
                         title: 'Ошибка деплоя',
-                        message: `Не удалось задеплоить frontend: ${err.message}`,
+                        message: err.message,
                         onClose: () => setShowMessageBox(null)
                       });
                     }
                   },
-                  onCancel: () => setShowMessageBox(null),
+                  onCancel: () => setShowMessageBox(null)
                 });
               },
-              onCancel: () => setShowMessageBox(null),
+              onCancel: () => setShowMessageBox(null)
             });
-        
+      
           } else {
-            // 3) Ветка для остальных типов сервисов
+            // 3) Ветка для остальных сервисов
             setShowMessageBox({
               isOpen: true,
               type: 'form',
               title: `Создать ${serviceType} сервис`,
-              message: `Введите параметры для нового ${serviceType} сервиса:`,
+              message: `Введите параметры для ${serviceType}:`,
               fields: [
-                { name: 'serviceName', label: 'Имя сервиса:',               type: 'text', placeholder: 'Название сервиса', defaultValue: '', autoFocus: true },
-                { name: 'path',        label: 'Путь в репозитории:',        type: 'text', placeholder: 'backend/src', defaultValue: '' },
-                { name: 'version',     label: 'Версия (e.g. 1.0.0):',        type: 'text', placeholder: '1.0.0', defaultValue: '1.0.0' },
-                { name: 'volume',      label: 'Объем (e.g. 5GB):',           type: 'text', placeholder: '5GB', defaultValue: '' },
+                { name: 'serviceName', label: 'Имя сервиса:',    type: 'text', placeholder: 'Название', defaultValue: '', autoFocus: true },
+                { name: 'path',        label: 'Путь в репозиторий', type: 'text', placeholder: 'src', defaultValue: '' },
+                { name: 'version',     label: 'Версия:',          type: 'text', placeholder: '1.0.0', defaultValue: '1.0.0' },
+                { name: 'volume',      label: 'Volume:',          type: 'text', placeholder: '5GB', defaultValue: '' }
               ],
               onConfirm: async formData => {
                 setShowMessageBox(null);
-                const trimmedName = formData.serviceName.trim();
-                const trimmedPath = formData.path.trim();
-        
-                if (serviceType === 'authentication' && !trimmedName) {
+                const name = formData.serviceName.trim();
+                const repoPath = formData.path.trim();
+                if (serviceType === 'authentication' && !name) {
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
                     title: 'Ошибка ввода',
-                    message: 'Имя службы аутентификации не может быть пустым.',
+                    message: 'Имя не может быть пустым.',
                     onClose: () => setShowMessageBox(null)
                   });
                   return;
                 }
-                if (!trimmedPath) {
+                if (!repoPath) {
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
                     title: 'Ошибка ввода',
-                    message: 'Путь в репозитории не может быть пустым.',
+                    message: 'Путь не может быть пустым.',
                     onClose: () => setShowMessageBox(null)
                   });
                   return;
                 }
-        
+      
                 try {
-                  let result, id, name;
+                  let result, id, displayName;
                   if (serviceType === 'authentication') {
-                    result = await createAuthService(currentProjectId, trimmedName);
+                    result = await createAuthService(currentProjectId, name);
                     id = result.authServiceId;
-                    name = trimmedName;
+                    displayName = name;
                   } else {
                     result = await createService(
                       currentProjectId,
                       serviceType,
                       position,
-                      trimmedName,
-                      trimmedPath,
+                      name,
+                      repoPath,
                       formData.version,
                       formData.volume
                     );
                     id = result.serviceId;
-                    name = result.name;
+                    displayName = result.name;
                   }
-        
+      
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
                     title: 'Сервис создан',
-                    message: `Сервис "${name}" создан с ID: ${id}.`,
+                    message: `ID: ${id}`,
                     onClose: () => setShowMessageBox(null)
                   });
-        
+      
                   const newNode = createReactFlowServiceNode(
                     id,
                     serviceType,
                     position,
-                    name,
+                    displayName,
                     currentProjectId,
                     'pending',
                     formData.volume,
                     formData.version,
-                    trimmedPath
+                    repoPath
                   );
-                  setNodes(prev => [...prev, newNode]);
+                  setNodes(ns => [...ns, newNode]);
+      
                 } catch (err) {
-                  console.error('Не удалось создать сервис:', err);
+                  console.error('Ошибка создания:', err);
                   setShowMessageBox({
                     isOpen: true,
                     type: 'alert',
                     title: 'Ошибка создания',
-                    message: `Не удалось создать сервис: ${err.message}`,
+                    message: err.message,
                     onClose: () => setShowMessageBox(null)
                   });
                 }
               },
-              onCancel: () => setShowMessageBox(null),
+              onCancel: () => setShowMessageBox(null)
             });
           }
+      
         }, [
           currentProjectId,
-          contextMenu,
           currentRepoUrl,
+          contextMenu,
           setShowMessageBox,
           setContextMenu,
-          setNodes,
+          setNodes
         ]);
          // Зависимости useCallback
         
