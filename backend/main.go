@@ -1844,12 +1844,45 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 	}
 	log.Println("Колонка 'k8s_deployment_name' проверена/добавлена.")
 
-	// Добавление колонки k8s_replicas (INTEGER)
+	// Добавление колонки k8s_namespace (TEXT)
 	query2 := `
+		ALTER TABLE services
+		ADD COLUMN IF NOT EXISTS k8s_namespace TEXT;
+	`
+	_, err = db.Exec(query2)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении колонки 'k8s_namespace': %w", err)
+	}
+	log.Println("Колонка 'k8s_namespace' проверена/добавлена.")
+
+	// Добавление колонки k8s_service_name (TEXT)
+	query3 := `
+		ALTER TABLE services
+		ADD COLUMN IF NOT EXISTS k8s_service_name TEXT;
+	`
+	_, err = db.Exec(query3)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении колонки 'k8s_service_name': %w", err)
+	}
+	log.Println("Колонка 'k8s_service_name' проверена/добавлена.")
+
+	// Добавление колонки k8s_node_port (INTEGER)
+	query4 := `
+		ALTER TABLE services
+		ADD COLUMN IF NOT EXISTS k8s_node_port INTEGER;
+	`
+	_, err = db.Exec(query4)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении колонки 'k8s_node_port': %w", err)
+	}
+	log.Println("Колонка 'k8s_node_port' проверена/добавлена.")
+
+	// Добавление колонки k8s_replicas (INTEGER)
+	query5 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_replicas INTEGER;
 	`
-	_, err = db.Exec(query2)
+	_, err = db.Exec(query5)
 	if err != nil {
 		return fmt.Errorf("ошибка при добавлении колонки 'k8s_replicas': %w", err)
 	}
