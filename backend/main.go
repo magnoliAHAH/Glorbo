@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -139,7 +140,9 @@ func main() {
 	if err := createTables(); err != nil {
 		log.Fatalf("Failed to create/check tables: %v", err)
 	}
-
+	if err := addK8sColumnsToServicesTable(db); err != nil {
+		log.Fatalf("Критическая ошибка при обновлении схемы БД: %v", err)
+	}
 	// Инициализация gRPC клиента для сервиса авторизации
 	client, err := grpcclient.New(ctx, logger, "grpcauth:44044", 2*time.Second, 3) // Уточните адрес gRPC сервиса
 	if err != nil {
@@ -1543,4 +1546,313 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "Unknown task_type", http.StatusBadRequest)
 	}
+}
+
+type CreateDeploymentRequest struct {
+	ProjectID      int64             `json:"projectId"`      // ID проекта для БД
+	ServiceType    string            `json:"serviceType"`    // Тип сервиса (например, "frontend")
+	DeploymentName string            `json:"deploymentName"` // Имя для Deployment (будет также использоваться для Pods/Service селектора)
+	Namespace      string            `json:"namespace"`
+	Image          string            `json:"image"`
+	ContainerPort  int32             `json:"containerPort"`
+	Env            map[string]string `json:"env,omitempty"`
+	Command        []string          `json:"command,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	Labels         map[string]string `json:"labels,omitempty"`   // Дополнительные лейблы
+	Replicas       *int32            `json:"replicas,omitempty"` // Количество реплик
+
+	// Дополнительные поля для сохранения в БД (как в вашей таблице 'services')
+	Position *Position `json:"position,omitempty"`
+	Version  string    `json:"version,omitempty"`
+	Volume   string    `json:"volume,omitempty"`
+	Path     string    `json:"path,omitempty"`
+}
+
+func createDeploymentAndServiceK8s(req *CreateDeploymentRequest) (*appsv1.Deployment, *corev1.Service, error) {
+	clientset, err := initK8sClient()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Установка количества реплик по умолчанию, если не указано
+	replicas := int32(1)
+	if req.Replicas != nil {
+		replicas = *req.Replicas
+	}
+
+	// Имя Deployment
+	deploymentName := req.DeploymentName
+	if deploymentName == "" { // Fallback, если имя не предоставлено
+		deploymentName = fmt.Sprintf("%s-deployment-%s", req.ServiceType, generateUUID()[:4])
+	}
+
+	// Используем лейблы из запроса. Если их нет, создаем дефолтные.
+	// Эти лейблы будут использоваться для селектора Deployment и Service,
+	// а также для Pod'ов, управляемых Deployment'ом.
+	podLabels := make(map[string]string)
+	if req.Labels != nil {
+		for k, v := range req.Labels {
+			podLabels[k] = v
+		}
+	}
+	// Важный лейбл для селектора Deployment и Service
+	podLabels["app"] = deploymentName // Например, app: my-frontend-deployment
+
+	// Проверка наличия Namespace, если нет — создаём
+	_, err = clientset.CoreV1().Namespaces().Get(context.TODO(), req.Namespace, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		log.Printf("Namespace %s не найден, создаю...", req.Namespace)
+		_, err = clientset.CoreV1().Namespaces().Create(context.TODO(), &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: req.Namespace},
+		}, metav1.CreateOptions{})
+		if err != nil {
+			return nil, nil, fmt.Errorf("ошибка создания Namespace %s: %v", req.Namespace, err)
+		}
+		log.Printf("Namespace %s создан.", req.Namespace)
+	} else if err != nil {
+		return nil, nil, fmt.Errorf("ошибка получения Namespace %s: %v", req.Namespace, err)
+	}
+
+	// --- Создание Deployment ---
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deploymentName,
+			Namespace: req.Namespace,
+			Labels:    podLabels, // Лейблы для самого Deployment
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas, // Желаемое количество реплик
+			Selector: &metav1.LabelSelector{
+				MatchLabels: podLabels, // Селектор Deployment'а должен соответствовать лейблам Pod'ов
+			},
+			Template: corev1.PodTemplateSpec{ // Шаблон Pod'а, который Deployment будет создавать
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: podLabels, // Лейблы для каждого Pod'а
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  deploymentName, // Имя контейнера внутри Pod'а (можно использовать имя Deployment)
+							Image: req.Image,
+							Ports: []corev1.ContainerPort{
+								{ContainerPort: req.ContainerPort},
+							},
+							Env:     mapToEnvVars(req.Env),
+							Command: req.Command,
+							Args:    req.Args,
+						},
+					},
+					RestartPolicy: corev1.RestartPolicyAlways,
+				},
+			},
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType, // Стратегия обновления
+			},
+			MinReadySeconds: 5, // Pod считается "готовым" через 5 секунд
+		},
+	}
+
+	createdDeployment, err := clientset.AppsV1().Deployments(req.Namespace).Create(context.TODO(), deployment, metav1.CreateOptions{})
+	if err != nil {
+		return nil, nil, fmt.Errorf("ошибка создания Deployment %s: %v", deploymentName, err)
+	}
+	log.Printf("Deployment %s создан в Namespace %s с %d репликами", deploymentName, req.Namespace, replicas)
+
+	// --- Создание Service для экспозиции Deployment ---
+	serviceName := fmt.Sprintf("%s-svc", deploymentName) // Имя Service на основе имени Deployment
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      serviceName,
+			Namespace: req.Namespace,
+			Labels:    podLabels, // Лейблы для Service
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: podLabels, // Селектор Service должен соответствовать лейблам Pod'ов
+			Ports: []corev1.ServicePort{
+				{
+					Protocol:   corev1.ProtocolTCP,
+					Port:       req.ContainerPort,                      // Порт, который будет слушать Service
+					TargetPort: intstr.FromInt(int(req.ContainerPort)), // Порт контейнера, куда направлять трафик
+					NodePort:   0,                                      // Kubernetes автоматически назначит NodePort в диапазоне 30000-32767
+				},
+			},
+			Type: corev1.ServiceTypeNodePort, // Тип Service для внешнего доступа через IP нод
+		},
+	}
+
+	createdService, err := clientset.CoreV1().Services(req.Namespace).Create(context.TODO(), service, metav1.CreateOptions{})
+	if err != nil {
+		// Если Service не создался, желательно удалить созданный Deployment
+		_ = clientset.AppsV1().Deployments(req.Namespace).Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
+		return createdDeployment, nil, fmt.Errorf("ошибка создания Service %s: %v", serviceName, err)
+	}
+	log.Printf("Service %s создан в Namespace %s (NodePort)", serviceName, req.Namespace)
+
+	return createdDeployment, createdService, nil
+}
+
+func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+
+	// requestsTotal.WithLabelValues("/api/create-deployment-service", r.Method).Inc() // Раскомментируйте, если используете Prometheus
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Проверка авторизации
+	if r.Context().Value(userIDKey) == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req CreateDeploymentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Printf("Invalid request body for CreateDeployment: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Проверки обязательных полей
+	if req.ProjectID == 0 || req.ServiceType == "" || req.DeploymentName == "" || req.Image == "" || req.Namespace == "" || req.ContainerPort == 0 {
+		log.Printf("Missing required fields for CreateDeployment: ProjectID=%d, ServiceType=%s, DeploymentName=%s, Image=%s, Namespace=%s, ContainerPort=%d",
+			req.ProjectID, req.ServiceType, req.DeploymentName, req.Image, req.Namespace, req.ContainerPort)
+		http.Error(w, "projectId, serviceType, deploymentName, image, namespace, and containerPort are required", http.StatusBadRequest)
+		return
+	}
+
+	// Если количество реплик не указано, устанавливаем по умолчанию 1
+	if req.Replicas == nil {
+		defaultReplicas := int32(1)
+		req.Replicas = &defaultReplicas
+	}
+
+	// Установка Position по умолчанию, если не предоставлена
+	if req.Position == nil {
+		req.Position = &Position{X: 0, Y: 0}
+	}
+
+	// --- Создание Deployment и Service в Kubernetes ---
+	deployment, svc, err := createDeploymentAndServiceK8s(&req) // Используем новую функцию
+	if err != nil {
+		log.Printf("Failed to create deployment or service in Kubernetes: %v", err)
+		http.Error(w, "Failed to create deployment or service in Kubernetes: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// --- Логика сохранения в базу данных ---
+	// Генерируем ID сервиса для БД (отдельно от K8s имён), чтобы иметь уникальный ID для фронтенда
+	serviceID := generateUUID()
+
+	// Вставляем или обновляем запись в таблице services
+	// Имя сервиса для БД берем из req.DeploymentName
+	_, err = db.Exec(`
+        INSERT INTO services
+            (id, project_id, name, type, status, volume, version, path, position_x, position_y,
+             k8s_deployment_name, k8s_namespace, k8s_service_name, k8s_node_port, k8s_replicas)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO UPDATE SET
+            project_id = EXCLUDED.project_id,
+            name = EXCLUDED.name,
+            type = EXCLUDED.type,
+            status = EXCLUDED.status,
+            volume = EXCLUDED.volume,
+            version = EXCLUDED.version,
+            path = EXCLUDED.path,
+            position_x = EXCLUDED.position_x,
+            position_y = EXCLUDED.position_y,
+            k8s_deployment_name = EXCLUDED.k8s_deployment_name,
+            k8s_namespace = EXCLUDED.k8s_namespace,
+            k8s_service_name = EXCLUDED.k8s_service_name,
+            k8s_node_port = EXCLUDED.k8s_node_port,
+            k8s_replicas = EXCLUDED.k8s_replicas;`, // Добавлена ON CONFLICT для обновления существующих записей
+		serviceID,
+		req.ProjectID,
+		req.DeploymentName, // Имя сервиса для отображения (берем из DeploymentName запроса)
+		req.ServiceType,
+		"Running", // Статус после успешного деплоя
+		req.Volume,
+		req.Version,
+		req.Path,
+		req.Position.X,
+		req.Position.Y,
+		deployment.Name, // Имя K8s Deployment
+		req.Namespace,   // Namespace Deployment и Service
+		svc.Name,        // Имя K8s Service
+		func() int32 { // Получаем NodePort из Service, если он есть
+			if len(svc.Spec.Ports) > 0 && svc.Spec.Ports[0].NodePort != 0 {
+				return svc.Spec.Ports[0].NodePort
+			}
+			return 0
+		}(),
+		*req.Replicas, // Сохраняем количество реплик
+	)
+	if err != nil {
+		log.Printf("DB insert/update failed for new K8s service %s (Deployment %s): %v", req.DeploymentName, deployment.Name, err)
+		// В случае ошибки БД, рассмотрите возможность удаления созданных K8s ресурсов.
+		http.Error(w, "Failed to save service info to database", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Service %s (ID: %s, Deployment: %s) saved/updated in DB for ProjectID %d", req.DeploymentName, serviceID, deployment.Name, req.ProjectID)
+
+	// --- Ответ фронтенду ---
+	resp := struct {
+		ServiceID      string `json:"serviceId"`      // ID сервиса из БД
+		DeploymentName string `json:"deploymentName"` // Имя Deployment в K8s
+		Namespace      string `json:"namespace"`
+		ServiceK8sName string `json:"serviceK8sName"` // Имя Service в K8s
+		NodePort       int32  `json:"nodePort,omitempty"`
+		Replicas       int32  `json:"replicas"` // Количество реплик
+	}{
+		ServiceID:      serviceID,
+		DeploymentName: deployment.Name,
+		Namespace:      req.Namespace,
+		ServiceK8sName: svc.Name,
+		NodePort:       0, // Будет перезаписано, если есть
+		Replicas:       *req.Replicas,
+	}
+
+	if len(svc.Spec.Ports) > 0 {
+		resp.NodePort = svc.Spec.Ports[0].NodePort
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(resp)
+}
+
+func addK8sColumnsToServicesTable(db *sql.DB) error {
+	log.Println("Проверка и добавление колонок Kubernetes в таблицу 'services'...")
+
+	// Добавление колонки k8s_deployment_name (TEXT)
+	query1 := `
+		ALTER TABLE services
+		ADD COLUMN IF NOT EXISTS k8s_deployment_name TEXT;
+	`
+	_, err := db.Exec(query1)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении колонки 'k8s_deployment_name': %w", err)
+	}
+	log.Println("Колонка 'k8s_deployment_name' проверена/добавлена.")
+
+	// Добавление колонки k8s_replicas (INTEGER)
+	query2 := `
+		ALTER TABLE services
+		ADD COLUMN IF NOT EXISTS k8s_replicas INTEGER;
+	`
+	_, err = db.Exec(query2)
+	if err != nil {
+		return fmt.Errorf("ошибка при добавлении колонки 'k8s_replicas': %w", err)
+	}
+	log.Println("Колонка 'k8s_replicas' проверена/добавлена.")
+
+	log.Println("Все необходимые колонки Kubernetes в таблице 'services' присутствуют.")
+	return nil
 }
