@@ -468,273 +468,183 @@ const DashboardForMain = () => {
         // - createReactFlowServiceNode (function): Функция для создания нового узла React Flow
         
         const handleCreateService = useCallback(async (serviceType) => {
-            // Проверка на действительность ID проекта
-            if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-                setShowMessageBox({
-                    isOpen: true,
-                    type: 'alert',
-                    title: 'Ошибка',
-                    message: 'ID проекта не найден или недействителен. Невозможно создать сервис.',
-                    onClose: () => {
-                        setShowMessageBox(null);
-                        setContextMenu(null);
-                    }
-                });
-                console.error('Project ID is invalid for service creation:', currentProjectId);
-                return;
-            }
-        
-            // Получаем позицию из контекстного меню для размещения нового узла
-            const position = { x: contextMenu.x, y: contextMenu.y };
-        
-            // Закрываем контекстное меню сразу после выбора типа сервиса
-            setContextMenu(null);
-        
-            // Логика для создания Frontend-сервиса (многошаговый процесс: сборка, затем деплой)
-            if (serviceType === 'frontend') {
-                // Шаг 1: Запрос параметров сборки для frontend
-                setShowMessageBox({
-                    isOpen: true,
-                    type: 'form', // Указываем, что это форма
-                    title: 'Параметры сборки Frontend',
-                    message: 'Введите параметры для сборки Docker-образа фронтенда:',
-                    fields: [ // Определяем поля формы
-                        { name: 'repo_url', label: 'URL репозитория:', type: 'text', defaultValue: currentRepoUrl || '', placeholder: 'https://github.com/user/repo', autoFocus: true },
-                        { name: 'branch', label: 'Ветка:', type: 'text', defaultValue: 'main', placeholder: 'main' },
-                        { name: 'path', label: 'Путь сборки:', type: 'text', defaultValue: 'frontend', placeholder: 'frontend/src' },
-                        { name: 'image_name', label: 'Имя образа (Docker):', type: 'text', placeholder: 'my-frontend-app' },
-                        { name: 'tag', label: 'Тег образа:', type: 'text', defaultValue: 'latest', placeholder: 'latest' },
-                    ],
-                    // onConfirm получает объект buildFormData со всеми введенными значениями
-                    onConfirm: async (buildFormData) => {
-                        setShowMessageBox(null); // Закрываем MessageBox
-                        try {
-                            const buildParams = {
-                                repo_url: buildFormData.repo_url,
-                                branch: buildFormData.branch,
-                                path: buildFormData.path,
-                                image_name: buildFormData.image_name,
-                                tag: buildFormData.tag,
-                            };
-        
-                            console.log('📦 Отправка запроса сборки:', buildParams);
-                            const buildBody = {
-                                project_id: currentProjectId,
-                                task_type: 'build',
-                                params: buildParams,
-                            };
-                            await runProjectTask(buildBody); // Вызываем функцию для запуска сборки
-        
-                            // После успешной сборки, запрашиваем параметры деплоя
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert', // Это просто уведомление
-                                title: 'Сборка начата',
-                                message: 'Процесс сборки фронтенда запущен. Теперь введите параметры деплоя.',
-                                onClose: () => {
-                                    setShowMessageBox(null);
-                                    // Шаг 2: Запрос параметров деплоя для frontend
-                                    setShowMessageBox({
-                                        isOpen: true,
-                                        type: 'form', // Снова форма для деплоя
-                                        title: 'Параметры деплоя Frontend',
-                                        message: 'Введите параметры для развертывания пода и сервиса:',
-                                        fields: [ // Поля для деплоя
-                                            { name: 'namespace', label: 'Namespace:', type: 'text', defaultValue: 'default', placeholder: 'default', autoFocus: true },
-                                            { name: 'podName', label: 'Имя пода:', type: 'text', placeholder: 'my-frontend-pod' },
-                                            { name: 'containerPort', label: 'Порт контейнера:', type: 'number', defaultValue: 80, placeholder: '80' },
-                                            // Используем 'textarea' для JSON-полей, чтобы пользователи могли вводить многострочные данные
-                                            { name: 'env', label: 'Переменные окружения (JSON):', type: 'textarea', placeholder: '{"VAR_NAME": "value"}', defaultValue: '{}' },
-                                            { name: 'labels', label: 'Лейблы (JSON):', type: 'textarea', placeholder: '{"app": "my-app"}', defaultValue: '{}' },
-                                        ],
-                                        // onConfirm получает объект deployFormData
-                                        onConfirm: async (deployFormData) => {
-                                            setShowMessageBox(null); // Закрываем MessageBox
-                                            let deployParams = {};
-                                            try {
-                                                // Преобразуем строковые JSON-поля в объекты
-                                                deployParams = {
-                                                    namespace: deployFormData.namespace,
-                                                    podName: deployFormData.podName,
-                                                    containerPort: Number(deployFormData.containerPort),
-                                                    env: JSON.parse(deployFormData.env),
-                                                    labels: JSON.parse(deployFormData.labels),
-                                                };
-                                                console.log('✅ Параметры деплоя:', deployParams);
-                                            } catch (e) {
-                                                // Обработка ошибки, если JSON был некорректным
-                                                setShowMessageBox({
-                                                    isOpen: true,
-                                                    type: 'alert',
-                                                    title: 'Ошибка ввода',
-                                                    message: 'Неверный JSON в переменных окружения или лейблах: ' + e.message,
-                                                    onClose: () => setShowMessageBox(null)
-                                                });
-                                                return;
-                                            }
-        
-                                            // Создаём pod и service в Kubernetes
-                                            try {
-                                                const podSpec = {
-                                                    namespace: deployParams.namespace,
-                                                    podName: deployParams.podName,
-                                                    image: `mixail.ermin33.fvds.ru:31339/${buildParams.image_name}:${buildParams.tag}`, // Используем имя образа из шага сборки
-                                                    containerPort: deployParams.containerPort,
-                                                    env: deployParams.env,
-                                                    command: [], // По умолчанию пустые
-                                                    args: [],    // По умолчанию пустые
-                                                    labels: deployParams.labels,
-                                                };
-        
-                                                console.log('🚀 Создание пода и сервиса:', podSpec);
-                                                // Вызываем функцию для создания пода и сервиса
-                                                const result = await createPodAndService(currentProjectId, podSpec);
-        
-                                                setShowMessageBox({
-                                                    isOpen: true,
-                                                    type: 'alert',
-                                                    title: 'Frontend задеплоен',
-                                                    message: `Frontend сервис "${deployParams.podName}" задеплоен. NodePort: ${result.nodePort}`,
-                                                    onClose: () => setShowMessageBox(null)
-                                                });
-        
-                                                // Создаем новый узел React Flow для отображения задеплоенного сервиса
-                                                const newNode = createReactFlowServiceNode(
-                                                    result.podName, // ID сервиса
-                                                    'frontend',     // Тип сервиса
-                                                    position,       // Позиция на схеме
-                                                    deployParams.podName, // Имя для отображения
-                                                    currentProjectId
-                                                    // Дополнительные данные, если необходимо: status, volume, version, path
-                                                );
-                                                setNodes((ns) => [...ns, newNode]); // Добавляем новый узел к существующим
-                                            } catch (err) {
-                                                console.error('❌ Ошибка деплоя:', err);
-                                                setShowMessageBox({
-                                                    isOpen: true,
-                                                    type: 'alert',
-                                                    title: 'Ошибка деплоя',
-                                                    message: 'Ошибка деплоя: ' + err.message,
-                                                    onClose: () => setShowMessageBox(null)
-                                                });
-                                            }
-                                        },
-                                        onCancel: () => setShowMessageBox(null), // Закрываем MessageBox при отмене
-                                    });
-                                }
-                            });
-                        } catch (err) {
-                            console.error('❌ Ошибка сборки:', err);
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Ошибка сборки',
-                                message: 'Ошибка сборки: ' + err.message,
-                                onClose: () => setShowMessageBox(null)
-                            });
-                        }
-                    },
-                    onCancel: () => setShowMessageBox(null), // Закрываем MessageBox при отмене
-                });
-            } else {
-                // Логика для остальных сервисов (backend, database, redis, authentication, nginx, message-queue)
-                setShowMessageBox({
-                    isOpen: true,
-                    type: 'form', // Используем 'form' для всех типов сервисов
-                    title: `Создать ${serviceType} сервис`,
-                    message: `Введите параметры для нового ${serviceType} сервиса:`,
-                    fields: [ // Определяем поля формы для других типов сервисов
-                        { name: 'serviceName', label: 'Имя сервиса:', type: 'text', placeholder: 'Название сервиса', defaultValue: '', autoFocus: true },
-                        { name: 'path', label: 'Путь в репозитории (e.g. backend/src):', type: 'text', defaultValue: '', placeholder: 'Путь к сервису' },
-                        { name: 'version', label: 'Версия (e.g. 1.0.0):', type: 'text', defaultValue: '1.0.0', placeholder: 'Версия' },
-                        { name: 'volume', label: 'Объем (если применимо, e.g. 5GB):', type: 'text', defaultValue: '', placeholder: 'Объем' }
-                    ],
-                    // onConfirm получает объект formData со всеми введенными значениями
-                    onConfirm: async (formData) => {
-                        setShowMessageBox(null); // Закрываем MessageBox
-                        // Теперь formData.serviceName и formData.path будут определены и содержать строки
-                        const trimmedAppName = formData.serviceName.trim();
-                        const trimmedPath = formData.path.trim();
-        
-                        // Специальная проверка для authentication: имя и путь обязательны
-                        if (serviceType === 'authentication') {
-                            if (!trimmedAppName) {
-                                setShowMessageBox({
-                                    isOpen: true,
-                                    type: 'alert',
-                                    title: 'Ошибка ввода',
-                                    message: 'Имя службы аутентификации не может быть пустым.',
-                                    onClose: () => setShowMessageBox(null)
-                                });
-                                return;
-                            }
-                        }
-                        // Проверка на пустой путь для всех сервисов
-                        if (!trimmedPath) {
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Ошибка ввода',
-                                message: 'Путь в репозитории не может быть пустым.',
-                                onClose: () => setShowMessageBox(null)
-                            });
-                            return;
-                        }
-        
-                        try {
-                            let result;
-                            let createdServiceId;
-                            let createdServiceName;
-        
-                            if (serviceType === 'authentication') {
-                                // Если это сервис аутентификации, вызываем специальную функцию
-                                result = await createAuthService(currentProjectId, trimmedAppName);
-                                createdServiceId = result.authServiceId;
-                                createdServiceName = trimmedAppName;
-                            } else {
-                                // Для всех остальных сервисов используем общую функцию createService
-                                result = await createService(currentProjectId, serviceType, position, trimmedAppName, trimmedPath, formData.version, formData.volume);
-                                createdServiceId = result.serviceId;
-                                createdServiceName = result.name;
-                            }
-        
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Сервис создан',
-                                message: `Сервис "${createdServiceName}" создан с ID: ${createdServiceId}.`,
-                                onClose: () => setShowMessageBox(null)
-                            });
-                            console.log('Создан сервис:', result);
-        
-                            // Создаем новый узел React Flow для отображения созданного сервиса
-                            const newNode = createReactFlowServiceNode(
-                                createdServiceId,
-                                serviceType,
-                                position,
-                                createdServiceName,
-                                currentProjectId,
-                                'pending', // Начальный статус
-                                formData.volume,
-                                formData.version,
-                                trimmedPath
-                            );
-                            setNodes((prevNodes) => [...prevNodes, newNode]); // Добавляем новый узел
-                        } catch (error) {
-                            console.error('Не удалось создать сервис:', error.message);
-                            setShowMessageBox({
-                                isOpen: true,
-                                type: 'alert',
-                                title: 'Ошибка создания',
-                                message: `Не удалось создать сервис: ${error.message}`,
-                                onClose: () => setShowMessageBox(null)
-                            });
-                        }
-                    },
-                    onCancel: () => setShowMessageBox(null), // Закрываем MessageBox при отмене
-                });
-            }
-        }, [currentProjectId, contextMenu, setNodes, currentRepoUrl]); // Зависимости useCallback
+          // Проверка на действительность ID проекта
+          if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+              setShowMessageBox({
+                  isOpen: true,
+                  type: 'alert',
+                  title: 'Ошибка',
+                  message: 'ID проекта не найден или недействителен. Невозможно создать сервис.',
+                  onClose: () => {
+                      setShowMessageBox(null);
+                      setContextMenu(null);
+                  }
+              });
+              console.error('Project ID is invalid for service creation:', currentProjectId);
+              return;
+          }
+      
+          // Получаем позицию из контекстного меню для размещения нового узла
+          // Убедитесь, что contextMenu объект доступен и содержит x, y
+          const position = contextMenu ? { x: contextMenu.x, y: contextMenu.y } : { x: 0, y: 0 };
+      
+          // Закрываем контекстное меню сразу после выбора типа сервиса
+          setContextMenu(null);
+      
+          // Определяем поля формы, общие для всех типов сервисов, но с предустановками для каждого
+          let formFields = [
+              { name: 'deploymentName', label: 'Имя деплоя:', type: 'text', placeholder: 'my-app-service', defaultValue: '', autoFocus: true },
+              { name: 'image', label: 'Docker образ:', type: 'text', placeholder: 'registry/image:tag' },
+              { name: 'namespace', label: 'Namespace:', type: 'text', defaultValue: `project-${currentProjectId}`, placeholder: `project-${currentProjectId}` },
+              { name: 'containerPort', label: 'Порт контейнера:', type: 'number', defaultValue: 80, placeholder: '80' },
+              { name: 'replicas', label: 'Количество реплик:', type: 'number', defaultValue: 1, placeholder: '1' },
+              { name: 'volume', label: 'Объем (если применимо, e.g. 5GB):', type: 'text', defaultValue: '', placeholder: 'Объем (опционально)' },
+              { name: 'version', label: 'Версия (e.g. 1.0.0):', type: 'text', defaultValue: '1.0.0', placeholder: 'Версия (опционально)' },
+              { name: 'path', label: 'Путь (для фронтенда/бэкенда):', type: 'text', defaultValue: '', placeholder: 'Путь к сервису в репозитории (опционально)' }
+          ];
+      
+          // Дополнительные предустановки для специфичных типов сервисов
+          switch (serviceType) {
+              case 'frontend':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.placeholder = `mixail.ermin33.fvds.ru:31339/your-frontend-app:main`;
+                      if (field.name === 'path') field.defaultValue = 'frontend';
+                      return field;
+                  });
+                  break;
+              case 'backend':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'path') field.defaultValue = 'backend';
+                      if (field.name === 'image') field.placeholder = 'my-backend:latest';
+                      return field;
+                  });
+                  break;
+              case 'database':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.defaultValue = 'postgres:13';
+                      if (field.name === 'containerPort') field.defaultValue = 5432;
+                      if (field.name === 'volume') field.defaultValue = '10GB';
+                      field.required = true; // Сделать эти поля обязательными для БД, если нужно
+                      return field;
+                  });
+                  break;
+              case 'redis':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.defaultValue = 'redis:latest';
+                      if (field.name === 'containerPort') field.defaultValue = 6379;
+                      return field;
+                  });
+                  break;
+              case 'authentication':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.placeholder = 'my-auth-service:latest';
+                      if (field.name === 'path') field.defaultValue = 'auth-service';
+                      if (field.name === 'containerPort') field.defaultValue = 8080;
+                      return field;
+                  });
+                  break;
+              case 'nginx':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.defaultValue = 'nginx:latest';
+                      if (field.name === 'containerPort') field.defaultValue = 80;
+                      return field;
+                  });
+                  break;
+              case 'message-queue':
+                  formFields = formFields.map(field => {
+                      if (field.name === 'image') field.defaultValue = 'rabbitmq:management';
+                      if (field.name === 'containerPort') field.defaultValue = 5672; // RabbitMQ default
+                      return field;
+                  });
+                  break;
+              default:
+                  // Для неизвестных типов сервисов оставим общие поля
+                  break;
+          }
+      
+          setShowMessageBox({
+              isOpen: true,
+              type: 'form',
+              title: `Создать ${serviceType} сервис`,
+              message: `Введите параметры для нового ${serviceType} сервиса:`,
+              fields: formFields,
+              onConfirm: async (formData) => {
+                  setShowMessageBox(null); // Закрываем MessageBox
+      
+                  // Валидация обязательных полей на клиенте
+                  const trimmedDeploymentName = formData.deploymentName.trim();
+                  const trimmedImage = formData.image.trim();
+                  const trimmedNamespace = formData.namespace.trim();
+                  const parsedContainerPort = Number(formData.containerPort);
+                  const parsedReplicas = Number(formData.replicas);
+      
+                  if (!trimmedDeploymentName || !trimmedImage || !trimmedNamespace || isNaN(parsedContainerPort) || parsedContainerPort <= 0 || isNaN(parsedReplicas) || parsedReplicas <= 0) {
+                      setShowMessageBox({
+                          isOpen: true,
+                          type: 'alert',
+                          title: 'Ошибка ввода',
+                          message: 'Имя деплоя, образ Docker, Namespace, Порт контейнера и Количество реплик являются обязательными полями и должны быть корректными.',
+                          onClose: () => setShowMessageBox(null)
+                      });
+                      return;
+                  }
+      
+                  try {
+                      // Создаем payload для API запроса
+                      const payload = {
+                          projectId: currentProjectId,
+                          serviceType: serviceType, // Используем serviceType, переданный в функцию
+                          deploymentName: trimmedDeploymentName,
+                          image: trimmedImage,
+                          namespace: trimmedNamespace,
+                          containerPort: parsedContainerPort,
+                          replicas: parsedReplicas,
+                          position: position, // Используем позицию из контекстного меню
+                          volume: formData.volume.trim() || undefined, // undefined, если пусто
+                          version: formData.version.trim() || undefined,
+                          path: formData.path.trim() || undefined,
+                      };
+      
+                      // Вызываем новую функцию для создания Deployment и Service
+                      const result = await createDeploymentAndService(currentProjectId, payload);
+      
+                      setShowMessageBox({
+                          isOpen: true,
+                          type: 'alert',
+                          title: 'Сервис задеплоен',
+                          message: `Сервис "${result.deploymentName}" успешно задеплоен! ID: ${result.serviceId}, K8s Service: ${result.serviceK8sName}, NodePort: ${result.nodePort || 'N/A'}.`,
+                          onClose: () => setShowMessageBox(null)
+                      });
+                      console.log('API Response:', result);
+      
+                      // Создаем новый узел React Flow для отображения задеплоенного сервиса
+                      const newNode = createReactFlowServiceNode(
+                          result.serviceId, // Используем serviceId из ответа API
+                          serviceType,
+                          position,
+                          result.deploymentName, // Используем deploymentName из ответа как label
+                          currentProjectId,
+                          'Running', // Предполагаем, что сервис успешно запущен
+                          formData.volume.trim() || undefined,
+                          formData.version.trim() || undefined,
+                          formData.path.trim() || undefined
+                      );
+                      setNodes((ns) => [...ns, newNode]); // Добавляем новый узел к существующим
+      
+                  } catch (error) {
+                      console.error('❌ Ошибка при развертывании сервиса:', error.message);
+                      setShowMessageBox({
+                          isOpen: true,
+                          type: 'alert',
+                          title: 'Ошибка деплоя',
+                          message: 'Ошибка при развертывании сервиса: ' + error.message,
+                          onClose: () => setShowMessageBox(null)
+                      });
+                  }
+              },
+              onCancel: () => setShowMessageBox(null), // Закрываем MessageBox при отмене
+          });
+      }, [currentProjectId, contextMenu, setNodes]);
         
       
       

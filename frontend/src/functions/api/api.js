@@ -188,3 +188,21 @@ export async function createPodAndService(projectId, podSpec) {
   return handleResponse(response);
 }
 
+export async function createDeploymentAndService(projectId, deploymentSpec) {
+    const url = `${API_BASE_URL}/projects/${projectId}/deploys`;
+    console.log("Отправка запроса на:", url);
+    console.log("С данными:", deploymentSpec);
+  
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        // Добавьте заголовок Authorization, если ваш API требует аутентификацию
+        // 'Authorization': 'Bearer YOUR_AUTH_TOKEN_HERE',
+      },
+      credentials: 'include', // Если используются куки для аутентификации
+      body: JSON.stringify(deploymentSpec),
+    });
+  
+    return handleResponse(response);
+  }
