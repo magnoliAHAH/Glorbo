@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled, { keyframes } from 'styled-components';
 
-// --- Styled Components (остаются такими же, как вы предоставили) ---
+// --- Styled Components ---
 const fadeIn = keyframes`
     from { opacity: 0; }
     to { opacity: 1; }
@@ -76,6 +76,22 @@ const Input = styled.input`
     }
 `;
 
+const TextArea = styled.textarea` /* НОВЫЙ СТИЛИЗОВАННЫЙ КОМПОНЕНТ ДЛЯ TEXTAREA */
+    width: calc(100% - 20px);
+    padding: 10px;
+    border-radius: 5px;
+    border: 1px solid #ddd;
+    font-size: 1em;
+    box-sizing: border-box;
+    min-height: 80px; /* Минимальная высота */
+    resize: vertical; /* Разрешить вертикальное изменение размера */
+    &:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+`;
+
 const ButtonContainer = styled.div`
     display: flex;
     justify-content: flex-end;
@@ -130,7 +146,7 @@ const Button = styled.button`
  * @param {string} props.message - Основной текст сообщения.
  * @param {string} [props.placeholder] - Плейсхолдер для поля ввода (только для type='prompt').
  * @param {Array<Object>} [props.fields] - Массив определений полей для ввода (только для type='form').
- * Каждый объект поля: { name: string, label: string, type: string (e.g., 'text', 'number'), defaultValue: any, placeholder: string }
+ * Каждый объект поля: { name: string, label: string, type: string (e.g., 'text', 'number', 'textarea'), defaultValue: any, placeholder: string, autoFocus: boolean }
  * @param {function} [props.onConfirm] - Колбэк при подтверждении. Для 'prompt' передает введенное значение. Для 'form' передает объект со всеми введенными данными.
  * @param {function} [props.onCancel] - Колбэк при отмене.
  * @param {function} [props.onClose] - Колбэк при закрытии (для 'alert'), также вызывается после onConfirm/onCancel.
@@ -153,6 +169,11 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
                 });
                 setFormValues(initialValues);
             }
+        }
+        // Убедимся, что MessageBox закрывается, когда isOpen становится false
+        if (!isOpen) {
+            setInputValue('');
+            setFormValues({}); // Сбросить значения формы при закрытии
         }
     }, [isOpen, type, fields]);
 
@@ -197,7 +218,8 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
         <MessageBoxOverlay onClick={handleOverlayClick}>
             <MessageBoxContent onClick={e => e.stopPropagation()}>
                 <Title>{title}</Title>
-                <Message>{message}</Message> {/* $hasInput удален, так как Message может быть и для форм */}
+                {/* Сообщение всегда отображается, независимо от типа ввода */}
+                <Message>{message}</Message>
 
                 {hasInput && ( // Рендерим одиночное поле ввода для 'prompt'
                     <Input
@@ -214,16 +236,27 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
                         {fields.map(field => (
                             <InputGroup key={field.name}>
                                 <Label htmlFor={field.name}>{field.label}</Label>
-                                <Input
-                                    id={field.name}
-                                    name={field.name}
-                                    type={field.type || 'text'}
-                                    placeholder={field.placeholder || ''}
-                                    value={formValues[field.name] || ''}
-                                    onChange={handleFormInputChange}
-                                    {...(field.type === 'number' && { inputMode: 'numeric', pattern: '[0-9]*' })} // Для числовых полей
-                                    {...(field.autoFocus && { autoFocus: true })} // Автофокус для первого поля
-                                />
+                                {field.type === 'textarea' ? (
+                                    <TextArea
+                                        id={field.name}
+                                        name={field.name}
+                                        placeholder={field.placeholder || ''}
+                                        value={formValues[field.name] || ''}
+                                        onChange={handleFormInputChange}
+                                        {...(field.autoFocus && { autoFocus: true })}
+                                    />
+                                ) : (
+                                    <Input
+                                        id={field.name}
+                                        name={field.name}
+                                        type={field.type || 'text'}
+                                        placeholder={field.placeholder || ''}
+                                        value={formValues[field.name] || ''}
+                                        onChange={handleFormInputChange}
+                                        {...(field.type === 'number' && { inputMode: 'numeric', pattern: '[0-9]*' })}
+                                        {...(field.autoFocus && { autoFocus: true })}
+                                    />
+                                )}
                             </InputGroup>
                         ))}
                     </div>
@@ -241,7 +274,7 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
                     >
                         {type === 'alert' ? 'OK'
                         : type === 'confirm' ? 'Подтвердить'
-                        : 'Создать'} {/* Для 'prompt' и 'form' */}
+                        : 'Создать'}
                     </Button>
                 </ButtonContainer>
             </MessageBoxContent>
