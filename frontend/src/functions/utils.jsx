@@ -80,7 +80,7 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
  * @param {number} projectId - ID проекта, к которому принадлежит сервис.
  * @returns {object} Объект узла React Flow.
  */
-export function createReactFlowServiceNode(id, serviceType, position, name, projectId) {
+export function createReactFlowServiceNode(id, serviceType, position, name, projectId, serviceStatus) {
     return {
         id: id,
         position: position,
@@ -90,7 +90,7 @@ export function createReactFlowServiceNode(id, serviceType, position, name, proj
             name: name || `${serviceType}-service`, // Используем переданное имя, если есть
             type: 'service', // Общий тип
             serviceType: serviceType, // Специфический тип сервиса
-            status: 'pending', // Начальный статус
+            status: serviceStatus, // Начальный статус
             volume: '',
             version: '',
             projectId: projectId, // Включаем ProjectID в данные узла

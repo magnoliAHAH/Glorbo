@@ -329,7 +329,8 @@ const DashboardForMain = () => {
                 svc.type,
                 { x: svc.positionX, y: svc.positionY },
                 svc.name,
-                svc.projectId
+                svc.projectId,
+                svc.status
               )
             );
       
