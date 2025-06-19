@@ -17,7 +17,6 @@ import MessageBox from './MessageBox';
 // Импорты API и утилит
 import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
-import RepoOrServiceDetailsSidebarv2 from './RepoOrServiceDetailsSidebarv2';
 
 // --- Styled Components --- (без изменений)
 const fadeIn = keyframes`
