@@ -96,16 +96,21 @@ type FileNode struct {
 // Service - представляет сервис, сохраненный в базе данных
 // Содержит информацию, которая может быть постоянной между сканированиями репозитория
 type Service struct {
-	ID        string  `json:"id"`        // Уникальный ID сервиса
-	ProjectID int64   `json:"projectId"` // ID проекта, к которому относится сервис
-	Name      string  `json:"name"`      // Имя сервиса (может быть произвольным)
-	Type      string  `json:"type"`      // Тип сервиса (backend, frontend, redis, etc.)
-	Status    string  `json:"status"`    // Статус сервиса
-	Volume    string  `json:"volume"`    // Объем
-	Version   string  `json:"version"`   // Версия
-	Path      string  `json:"path"`      // Относительный путь в репозитории (например, "backend", "frontend/src")
-	PositionX float64 `json:"positionX"` // Координата X на канвасе
-	PositionY float64 `json:"positionY"` // Координата Y на канвасе
+	ID                string         `json:"id"`        // Уникальный ID сервиса
+	ProjectID         int64          `json:"projectId"` // ID проекта, к которому относится сервис
+	Name              string         `json:"name"`      // Имя сервиса (может быть произвольным)
+	Type              string         `json:"type"`      // Тип сервиса (backend, frontend, redis, etc.)
+	Status            string         `json:"status"`    // Статус сервиса
+	Volume            string         `json:"volume"`    // Объем
+	Version           string         `json:"version"`   // Версия
+	Path              string         `json:"path"`      // Относительный путь в репозитории (например, "backend", "frontend/src")
+	PositionX         float64        `json:"positionX"` // Координата X на канвасе
+	PositionY         float64        `json:"positionY"` // Координата Y на канвасе
+	K8sDeploymentName sql.NullString `json:"k8sDeploymentName"`
+	K8sNamespace      sql.NullString `json:"k8sNamespace"`
+	K8sServiceName    sql.NullString `json:"k8sServiceName"`
+	K8sNodePort       sql.NullInt32  `json:"k8sNodePort"` // Используем sql.NullInt32 для int полей, которые могут быть NULL
+	K8sReplicas       sql.NullInt32  `json:"k8sReplicas"`
 }
 
 // Инициализация Prometheus метрик при запуске приложения
@@ -191,6 +196,8 @@ func main() {
 	router.Handle("/api/projects/{project_id}/deploys", WithAuth(http.HandlerFunc(handleCreateDeploymentAndService))).Methods("POST", "OPTIONS")
 
 	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")
+
+	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails))).Methods("GET", "OPTIONS")
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
@@ -1890,4 +1897,81 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 
 	log.Println("Все необходимые колонки Kubernetes в таблице 'services' присутствуют.")
 	return nil
+}
+
+func handleGetServiceDetails(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод не разрешен", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Извлекаем переменные пути из запроса
+	vars := mux.Vars(r)
+	projectIDStr := vars["projectId"]
+	serviceID := vars["serviceId"]
+
+	// Преобразуем projectIDStr в int
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		log.Printf("Неверный project ID в URL: %v", err)
+		http.Error(w, "Неверный project ID", http.StatusBadRequest)
+		return
+	}
+
+	if db == nil {
+		log.Println("Ошибка: Соединение с БД не установлено.")
+		http.Error(w, "Ошибка сервера: Соединение с базой данных не установлено", http.StatusInternalServerError)
+		return
+	}
+
+	// Выполняем SQL-запрос для получения всей строки сервиса
+	query := `
+		SELECT 
+			id, project_id, name, type, status, volume, version, path, position_x, position_y, 
+			k8s_deployment_name, k8s_namespace, k8s_service_name, k8s_node_port, k8s_replicas
+		FROM services
+		WHERE project_id = $1 AND id = $2;
+	`
+	var service Service
+	err = db.QueryRow(query, projectID, serviceID).Scan(
+		&service.ID,
+		&service.ProjectID,
+		&service.Name,
+		&service.Type,
+		&service.Status,
+		&service.Volume,
+		&service.Version,
+		&service.Path,
+		&service.PositionX,
+		&service.PositionY,
+		&service.K8sDeploymentName,
+		&service.K8sNamespace,
+		&service.K8sServiceName,
+		&service.K8sNodePort,
+		&service.K8sReplicas,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Printf("Сервис не найден: ProjectID=%d, ServiceID=%s", projectID, serviceID)
+			http.Error(w, "Сервис не найден", http.StatusNotFound)
+		} else {
+			log.Printf("Ошибка базы данных при получении сервиса: %v", err)
+			http.Error(w, "Ошибка сервера при получении деталей сервиса", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Отправляем найденные детали сервиса в формате JSON
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(service)
 }

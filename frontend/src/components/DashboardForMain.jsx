@@ -771,7 +771,7 @@ const DashboardForMain = () => {
                 )}
             </Content>
 
-            <RepoOrServiceDetailsSidebarv2
+            <RepoOrServiceDetailsSidebar
                 isOpen={isSidebarOpen}
                 content={sidebarContent}
                 onClose={() => setIsSidebarOpen(false)}

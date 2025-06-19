@@ -1,35 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import ServiceLogs from './ServiceLogs'; // Убедитесь, что пути правильные
+
+// Убедитесь, что эти пути правильные относительно местоположения этого файла
+import ServiceLogs from './ServiceLogs';
 import DeployLogs from './DeployLogs';
 import ServiceUpdates from './ServiceUpdates';
 
-// Предполагаемые стилизованные компоненты
-// import { SidebarWrapper, SidebarHeader, CloseButton, SidebarContent, Button } from './YourStyledComponents';
-// Или если вы используете Tailwind CSS:
-// const SidebarWrapper = ({ isOpen, children }) => (
-//     <div className={`fixed inset-y-0 right-0 w-80 bg-gray-800 text-white shadow-lg transform ${isOpen ? 'translate-x-0' : 'translate-x-full'} transition-transform duration-300 ease-in-out z-50 rounded-l-lg p-4`}>
-//         {children}
-//     </div>
-// );
-// const SidebarHeader = ({ children }) => <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">{children}</div>;
-// const CloseButton = ({ onClick, children }) => <button onClick={onClick} className="text-gray-400 hover:text-white transition-colors duration-200"> {children} </button>;
-// const SidebarContent = ({ children }) => <div className="space-y-4 text-sm overflow-y-auto h-[calc(100%-8rem)]">{children}</div>; // Увеличено пространство для контента
-// const Button = ({ onClick, children, className = "" }) => <button onClick={onClick} className={`px-4 py-2 rounded-md transition-colors duration-200 ${className}`}>{children}</button>;
-// const TabButton = ({ isActive, onClick, children }) => (
-//     <button
-//         onClick={onClick}
-//         className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
-//             isActive ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-//         }`}
-//     >
-//         {children}
-//     </button>
-// );
-
-
-// --- ЗАГЛУШКИ: Замените на ваши реальные компоненты/функции ---
-// Если вы используете Tailwind, то вам понадобятся похожие компоненты для стилизации.
-// Для демонстрации я включаю базовые стилизованные компоненты, если у вас их нет.
+// --- Стилизованные компоненты (Заглушки) ---
+// Если вы используете Tailwind CSS, то можете раскомментировать и использовать их,
+// иначе эти базовые стили будут работать.
 const SidebarWrapper = ({ isOpen, children }) => (
     <div style={{
         position: 'fixed',
@@ -99,6 +77,7 @@ const SidebarContent = ({ children }) => (
     </div>
 );
 
+// Эту кнопку можно использовать внутри ServiceLogs, DeployLogs, ServiceUpdates
 const Button = ({ onClick, children, className = "" }) => (
     <button
         onClick={onClick}
@@ -120,6 +99,7 @@ const Button = ({ onClick, children, className = "" }) => (
     </button>
 );
 
+// Эта кнопка используется для вкладок в самом сайдбаре
 const TabButton = ({ isActive, onClick, children }) => (
     <button
         onClick={onClick}
@@ -146,11 +126,32 @@ const TabButton = ({ isActive, onClick, children }) => (
     </button>
 );
 
+// Заглушка для кнопки "Удалить сервис"
+const DeleteButton = ({ onClick, children, className = "" }) => (
+    <button
+        onClick={onClick}
+        className={className}
+        style={{
+            padding: '0.5rem 1rem',
+            borderRadius: '0.375rem',
+            transition: 'background-color 0.2s',
+            border: 'none',
+            cursor: 'pointer',
+            backgroundColor: '#dc2626', // bg-red-600
+            color: 'white',
+            fontWeight: 'bold',
+            width: '100%',
+            marginTop: '1rem', // mt-auto pt-4 if it's placed after content for bottom alignment
+        }}
+        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'} // hover:bg-red-700
+        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+    >
+        {children}
+    </button>
+);
 
-// --- Конец ЗАГЛУШЕК ---
 
-
-// Заглушки для функций рендеринга информации о репозитории и сервисе
+// --- Вспомогательные функции рендеринга информации (могут быть и в отдельном файле, но для самодостаточности здесь) ---
 const renderFileNodeForSidebar = (content) => {
     if (!content) return <p>No repository content available.</p>;
     return (
@@ -186,7 +187,22 @@ const renderServiceInfoForSidebar = (content) => {
 };
 
 
-const RepoOrServiceDetailsSidebarv2 = ({ isOpen, content, onClose, onDeleteNode }) => {
+/**
+ * Компонент боковой панели для отображения деталей репозитория или сервиса.
+ * Позволяет переключаться между вкладками "Детали", "Логи", "Логи деплоя" и "Обновления" для сервисов.
+ *
+ * @param {object} props - Свойства компонента.
+ * @param {boolean} props.isOpen - Определяет, открыта ли боковая панель.
+ * @param {object} props.content - Объект с данными для отображения (либо репозитория, либо сервиса).
+ * Ожидаемые поля для сервиса: { id, projectId, type, name/label, status, nodePort, namespace, image, replicas, volume, version, path, k8sDeploymentName, k8sServiceName }
+ * Ожидаемые поля для репозитория: { type: 'repo', name, url, ... }
+ * @param {function} props.onClose - Функция обратного вызова для закрытия боковой панели.
+ * @param {function} props.onDeleteNode - Функция обратного вызова для удаления узла (сервиса).
+ * Принимает serviceId и projectId.
+ * @param {function} props.setShowMessageBox - Функция для отображения модальных окон (подтверждений, алертов).
+ * Это проп, который должен быть передан из родительского компонента.
+ */
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, setShowMessageBox }) => {
     // Определяем начальную активную вкладку. По умолчанию 'details'.
     const [activeView, setActiveView] = useState('details');
 
@@ -203,7 +219,7 @@ const RepoOrServiceDetailsSidebarv2 = ({ isOpen, content, onClose, onDeleteNode 
     const handleDeleteClick = () => {
         // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
         if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
-            // Предполагаем, что setShowMessageBox доступен из родительского компонента
+            // Используем setShowMessageBox, который передан через пропсы
             setShowMessageBox({
                 isOpen: true,
                 type: 'confirm',
@@ -243,11 +259,14 @@ const RepoOrServiceDetailsSidebarv2 = ({ isOpen, content, onClose, onDeleteNode 
             case 'details':
                 return renderServiceInfoForSidebar(content);
             case 'logs':
-                return <ServiceLogs serviceId={content.id} />; // Используем новый компонент
+                // Передаем serviceId в дочерний компонент логов
+                return <ServiceLogs serviceId={content.id} />;
             case 'deploy-logs':
-                return <DeployLogs serviceId={content.id} />; // Используем новый компонент
+                // Передаем serviceId в дочерний компонент логов деплоя
+                return <DeployLogs serviceId={content.id} />;
             case 'updates':
-                return <ServiceUpdates serviceId={content.id} />; // Используем новый компонент
+                // Передаем serviceId в дочерний компонент обновлений
+                return <ServiceUpdates serviceId={content.id} />;
             default:
                 return renderServiceInfoForSidebar(content);
         }
@@ -294,29 +313,4 @@ const RepoOrServiceDetailsSidebarv2 = ({ isOpen, content, onClose, onDeleteNode 
     );
 };
 
-// Заглушка для кнопки "Удалить сервис", если вы используете свои стилизованные компоненты
-const DeleteButton = ({ onClick, children, className = "" }) => (
-    <button
-        onClick={onClick}
-        className={className}
-        style={{
-            padding: '0.5rem 1rem',
-            borderRadius: '0.375rem',
-            transition: 'background-color 0.2s',
-            border: 'none',
-            cursor: 'pointer',
-            backgroundColor: '#dc2626', // bg-red-600
-            color: 'white',
-            fontWeight: 'bold',
-            width: '100%',
-            marginTop: '1rem', // mt-auto pt-4 if it's placed after content for bottom alignment
-        }}
-        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'} // hover:bg-red-700
-        onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
-    >
-        {children}
-    </button>
-);
-
-
-export default RepoOrServiceDetailsSidebarv2;
+export default RepoOrServiceDetailsSidebar;
