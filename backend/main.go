@@ -653,24 +653,54 @@ func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
 
 // getServicesByProjectID извлекает все сервисы из БД для заданного projectID
 func getServicesByProjectID(projectID int64) ([]Service, error) {
-	rows, err := db.Query(`
-		SELECT id, project_id, name, type, status, volume, version, path, position_x, position_y
+	query := `
+		SELECT 
+			id, project_id, name, type, status, volume, version, path, 
+			position_x, position_y,
+			k8s_deployment_name, k8s_namespace, k8s_service_name, 
+			k8s_node_port, k8s_replicas
 		FROM services
-		WHERE project_id = $1
-	`, projectID)
+		WHERE project_id = $1;
+	`
+
+	rows, err := db.Query(query, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("error querying services: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
 	var services []Service
+
 	for rows.Next() {
-		var s Service
-		if err := rows.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Type, &s.Status, &s.Volume, &s.Version, &s.Path, &s.PositionX, &s.PositionY); err != nil {
-			return nil, fmt.Errorf("error scanning service row: %w", err)
+		var svc Service
+		err := rows.Scan(
+			&svc.ID,
+			&svc.ProjectID,
+			&svc.Name,
+			&svc.Type,
+			&svc.Status,
+			&svc.Volume,
+			&svc.Version,
+			&svc.Path,
+			&svc.PositionX,
+			&svc.PositionY,
+			&svc.K8sDeploymentName,
+			&svc.K8sNamespace,
+			&svc.K8sServiceName,
+			&svc.K8sNodePort,
+			&svc.K8sReplicas,
+		)
+		if err != nil {
+			log.Printf("Ошибка при сканировании строки сервиса: %v", err)
+			continue
 		}
-		services = append(services, s)
+		services = append(services, svc)
 	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
 	return services, nil
 }
 
