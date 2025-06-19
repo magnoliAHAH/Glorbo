@@ -687,7 +687,7 @@ const DashboardForMain = () => {
                     position,
                     displayName,
                     currentProjectId,
-                    'pending',
+                    'Running',
                     formData.volume,
                     formData.version,
                     repoPath
