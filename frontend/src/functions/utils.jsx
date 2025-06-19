@@ -188,11 +188,11 @@ export function renderServiceInfoForSidebar(serviceData) {
             {serviceData.version && <p><strong>Version:</strong> {serviceData.version}</p>}
             {serviceData.volume && <p><strong>Volume:</strong> {serviceData.volume}</p>}
             {serviceData.projectId && <p><strong>Project ID:</strong> {serviceData.projectId}</p>} {/* Отображаем projectId */}
-            {serviceData.k8sDeploymentName && <p><strong>K8s Deployment:</strong> {serviceData.k8sDeploymentName}</p>}
-            {serviceData.k8sNamespace && <p><strong>K8s Namespace:</strong> {serviceData.k8sNamespace}</p>}
-            {serviceData.k8sServiceName && <p><strong>K8s Service Name:</strong> {serviceData.k8sServiceName}</p>}
-            {serviceData.k8sNodePort !== 0 && <p><strong>K8s NodePort:</strong> {serviceData.k8sNodePort}</p>}
-            {serviceData.k8sReplicas !== 0 && <p><strong>K8s Replicas:</strong> {serviceData.k8sReplicas}</p>}
+            {serviceData.k8sDeploymentName && <p><strong>Deployment:</strong> {serviceData.k8sDeploymentName}</p>}
+            {serviceData.k8sNamespace && <p><strong>Namespace:</strong> {serviceData.k8sNamespace}</p>}
+            {serviceData.k8sServiceName && <p><strong>Service Name:</strong> {serviceData.k8sServiceName}</p>}
+            {serviceData.k8sNodePort !== 0 && <p><strong>Port:</strong> {serviceData.k8sNodePort}</p>}
+            {serviceData.k8sReplicas !== 0 && <p><strong>Replicas:</strong> {serviceData.k8sReplicas}</p>}
             
         </div>
     );

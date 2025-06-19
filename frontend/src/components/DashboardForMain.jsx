@@ -332,7 +332,12 @@ const DashboardForMain = () => {
                 { x: svc.positionX, y: svc.positionY },
                 svc.name,
                 svc.projectId,
-                svc.status
+                svc.status,
+                svc.k8sDeploymentName,
+                svc.k8sNamespace,
+                svc.k8sServiceName,
+                svc.k8sNodePort,
+                svc.k8sReplicas
               )
             );
       
