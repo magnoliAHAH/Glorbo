@@ -802,7 +802,7 @@ const DashboardForMain = () => {
                             <Background variant="dots" gap={12} size={1} />
                             <Panel position="top-right">
                                 {currentRepoUrl && <div>Current Repo: <strong>{currentRepoUrl.split('/').pop()}</strong></div>}
-                                {currentProjectId && <div>Project IDD: <strong>{currentProjectId}</strong></div>}
+                                {currentProjectId && <div>Project ID: <strong>{currentProjectId}</strong></div>}
                             </Panel>
                         </ReactFlow>
 
