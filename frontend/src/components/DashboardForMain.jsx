@@ -348,7 +348,7 @@ const DashboardForMain = () => {
                     console.log(`[Dashboard] Создание узла сервиса для ${svc.name}: ` +
                                 `ID=${svc.id}, Тип=${svc.type}, Статус=${status}, ` +
                                 `Имя K8s деплоя=${k8sDeploymentName}, Реплики=${k8sReplicas}`); // Дополнительная проверка
-
+                  
                     return createReactFlowServiceNode(
                         svc.id,
                         svc.type, // serviceType
@@ -367,7 +367,7 @@ const DashboardForMain = () => {
                     );
                 });
                 console.log("[Dashboard] Сгенерированные serviceNodes (после сглаживания):", serviceNodes); // Лог сгенерированных узлов сервисов
-
+                const filteredFileServiceNodes = fileNodes.filter(n => n.type === 'serviceNode');
                 // Собираем итоговый набор узлов
                 setNodes([
                     repoNode,
@@ -377,6 +377,7 @@ const DashboardForMain = () => {
 
                 // Сбрасываем рёбра
                 setEdges(fileEdges);
+            
             
       
             // Собираем итоговый набор узлов
