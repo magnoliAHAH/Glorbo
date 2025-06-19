@@ -322,24 +322,62 @@ const DashboardForMain = () => {
               getProjectServices(currentProjectId)
             ]);
           })
-          .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
-            // Преобразуем сервисы из API в узлы
-            const filteredFileServiceNodes = fileNodes.filter(n => n.type === 'serviceNode');
-            const serviceNodes = services.map(svc =>
-              createReactFlowServiceNode(
-                svc.id,
-                svc.type,
-                { x: svc.positionX, y: svc.positionY },
-                svc.name,
-                svc.projectId,
-                svc.status,
-                svc.k8sDeploymentName,
-                svc.k8sNamespace,
-                svc.k8sServiceName,
-                svc.k8sNodePort,
-                svc.k8sReplicas
-              )
-            );
+            .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
+                console.log("[Dashboard] Services from API (raw data):", services); // Проверка сырых данных
+
+                // Преобразуем сервисы из API в узлы React Flow
+                const serviceNodes = services.map(svc => {
+                    // --- КРАСИВОЕ ИЗВЛЕЧЕНИЕ И ПРЕОБРАЗОВАНИЕ GO NULLABLE ПОЛЕЙ ---
+                    // Используем оператор опциональной цепочки (?.) и оператор нулевого слияния (||)
+                    // для безопасного извлечения значений из Go-специфичных объектов
+                    // ({ "String": "value", "Valid": true } или { "Int32": 0, "Valid": false })
+                    // Если поле Valid: false или String/Int32 отсутствует, используем значение по умолчанию.
+
+                    const k8sDeploymentName = svc.k8sDeploymentName?.String || '';
+                    const k8sNamespace = svc.k8sNamespace?.String || '';
+                    const k8sServiceName = svc.k8sServiceName?.String || '';
+                    const k8sNodePort = svc.k8sNodePort?.Int32 || 0;
+                    const k8sReplicas = svc.k8sReplicas?.Int32 || 0;
+
+                    // Аналогично для других полей, которые могут быть Go Nullable
+                    const volume = svc.volume?.String || '';
+                    const version = svc.version?.String || '';
+                    const path = svc.path?.String || '';
+                    const status = svc.status; // Предполагается, что статус уже строка
+
+                    console.log(`[Dashboard] Создание узла сервиса для ${svc.name}: ` +
+                                `ID=${svc.id}, Тип=${svc.type}, Статус=${status}, ` +
+                                `Имя K8s деплоя=${k8sDeploymentName}, Реплики=${k8sReplicas}`); // Дополнительная проверка
+
+                    return createReactFlowServiceNode(
+                        svc.id,
+                        svc.type, // serviceType
+                        { x: svc.positionX, y: svc.positionY },
+                        svc.name,
+                        svc.projectId,
+                        status, // serviceStatus - теперь гарантированно строка
+                        volume,      // <-- Уже сглаженная строка
+                        version,     // <-- Уже сглаженная строка
+                        path,        // <-- Уже сглаженная строка
+                        k8sDeploymentName, // <-- Уже сглаженная строка
+                        k8sNamespace,
+                        k8sServiceName,
+                        k8sNodePort,     // <-- Уже сглаженное число
+                        k8sReplicas      // <-- Уже сглаженное число
+                    );
+                });
+                console.log("[Dashboard] Сгенерированные serviceNodes (после сглаживания):", serviceNodes); // Лог сгенерированных узлов сервисов
+
+                // Собираем итоговый набор узлов
+                setNodes([
+                    repoNode,
+                    ...fileNodes.filter(n => n.type !== 'serviceNode'), // Исключаем сервисы, если convertFileNodeToReactFlowElements их тоже создает
+                    ...serviceNodes // Добавляем сервисы из БД
+                ]);
+
+                // Сбрасываем рёбра
+                setEdges(fileEdges);
+            
       
             // Собираем итоговый набор узлов
             setNodes([
