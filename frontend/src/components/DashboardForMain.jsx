@@ -100,7 +100,7 @@ const ServiceNodeContainer = styled(StyledNode)`
 
 const RepoNode = ({ data }) => (
     <RepoNodeContainer>
-        📦 {data.name || 'Repository'}
+        📦 {data.name || 'RepositoryLol'}
     </RepoNodeContainer>
 );
 
