@@ -104,12 +104,15 @@ const RepoNode = ({ data }) => (
     </RepoNodeContainer>
 );
 
-const ServiceNode = ({ data }) => (
+const ServiceNode = ({ data }) => {
+  console.log("ServiceNode received data:", data);
+  console.log("ServiceNode status:", data.status, "Type:", typeof data.status);
+  return(
     <ServiceNodeContainer serviceType={data.serviceType}>
       <div>⚙️ {data.name || 'Service'}</div>
       <StatusText>{data.status || 'unknown'}</StatusText>
     </ServiceNodeContainer>
-  );
+)};
 
 const nodeTypes = {
     repoNode: RepoNode,
