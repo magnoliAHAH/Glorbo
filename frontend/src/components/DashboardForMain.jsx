@@ -282,124 +282,119 @@ const DashboardForMain = () => {
 
     // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
     useEffect(() => {
-        if (!currentRepoUrl) {
+      if (!currentRepoUrl) {
           navigate('/projects');
           return;
-        }
-        if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
-          console.log('Waiting for valid currentProjectId. Current:', currentProjectId);
+      }
+      if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
+          console.log('[Dashboard] Waiting for valid currentProjectId. Current:', currentProjectId);
           return;
-        }
-      
-        setLoading(true);
-        setError(null);
-      
-        // Шаг 1: получить дерево репозитория
-        getRepoTree(currentRepoUrl)
+      }
+
+      setLoading(true);
+      setError(null);
+
+      // Шаг 1: Получить дерево репозитория
+      getRepoTree(currentRepoUrl)
           .then(fetchedStructure => {
-            console.log('Fetched structure:', fetchedStructure);
-            setStructure(fetchedStructure);
-      
-            // Собираем узел репозитория
-            const repoNode = {
-              id: fetchedStructure.id,
-              position: { x: 50, y: 50 },
-              type: 'repoNode',
-              data: {
-                id: fetchedStructure.id,
-                name: fetchedStructure.name || currentRepoUrl.split('/').pop(),
-                type: 'repo',
-                URL: currentRepoUrl,
-                projectId: currentProjectId,
-              },
-              draggable: true,
-            };
-      
-            // Параллельно запрашиваем список сервисов
-            return Promise.all([
-              Promise.resolve(repoNode),
-              Promise.resolve(convertFileNodeToReactFlowElements(fetchedStructure)),
-              getProjectServices(currentProjectId)
-            ]);
+              console.log('[Dashboard] Fetched structure:', fetchedStructure);
+              setStructure(fetchedStructure);
+
+              // Собираем узел репозитория
+              const repoNode = {
+                  id: fetchedStructure.id,
+                  position: { x: 50, y: 50 },
+                  type: 'repoNode',
+                  data: {
+                      id: fetchedStructure.id,
+                      name: fetchedStructure.name || currentRepoUrl.split('/').pop(),
+                      type: 'repo',
+                      URL: currentRepoUrl,
+                      projectId: currentProjectId,
+                  },
+                  draggable: true,
+              };
+
+              // Параллельно запрашиваем список сервисов и преобразуем структуру файлов
+              return Promise.all([
+                  Promise.resolve(repoNode),
+                  convertFileNodeToReactFlowElements(fetchedStructure), // Это уже возвращает { nodes, edges }
+                  getProjectServices(currentProjectId)
+              ]);
           })
-            .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
-                console.log("[Dashboard] Services from API (raw data):", services); // Проверка сырых данных
+          .then(([repoNode, { nodes: fileSystemNodes = [], edges: fileSystemEdges = [] }, services]) => {
+              console.log("[Dashboard] Services from API (raw data):", services); // Проверка сырых данных
 
-                // Преобразуем сервисы из API в узлы React Flow
-                const serviceNodes = services.map(svc => {
-                    // --- КРАСИВОЕ ИЗВЛЕЧЕНИЕ И ПРЕОБРАЗОВАНИЕ GO NULLABLE ПОЛЕЙ ---
-                    // Используем оператор опциональной цепочки (?.) и оператор нулевого слияния (||)
-                    // для безопасного извлечения значений из Go-специфичных объектов
-                    // ({ "String": "value", "Valid": true } или { "Int32": 0, "Valid": false })
-                    // Если поле Valid: false или String/Int32 отсутствует, используем значение по умолчанию.
+              // Преобразуем сервисы из API в узлы React Flow
+              const serviceNodes = services.map(svc => {
+                  // --- КРАСИВОЕ ИЗВЛЕЧЕНИЕ И ПРЕОБРАЗОВАНИЕ GO NULLABLE ПОЛЕЙ ---
+                  // Используем оператор опциональной цепочки (?.) и оператор нулевого слияния (||)
+                  // для безопасного извлечения значений из Go-специфичных объектов
+                  // ({ "String": "value", "Valid": true } или { "Int32": 0, "Valid": false })
+                  // Если поле Valid: false или String/Int32 отсутствует, используем значение по умолчанию.
 
-                    const k8sDeploymentName = svc.k8sDeploymentName?.String || '';
-                    const k8sNamespace = svc.k8sNamespace?.String || '';
-                    const k8sServiceName = svc.k8sServiceName?.String || '';
-                    const k8sNodePort = svc.k8sNodePort?.Int32 || 0;
-                    const k8sReplicas = svc.k8sReplicas?.Int32 || 0;
+                  const k8sDeploymentName = svc.k8sDeploymentName?.String || '';
+                  const k8sNamespace = svc.k8sNamespace?.String || '';
+                  const k8sServiceName = svc.k8sServiceName?.String || '';
+                  const k8sNodePort = svc.k8sNodePort?.Int32 || 0;
+                  const k8sReplicas = svc.k8sReplicas?.Int32 || 0;
 
-                    // Аналогично для других полей, которые могут быть Go Nullable
-                    const volume = svc.volume?.String || '';
-                    const version = svc.version?.String || '';
-                    const path = svc.path?.String || '';
-                    const status = svc.status; // Предполагается, что статус уже строка
+                  // Аналогично для других полей, которые могут быть Go Nullable
+                  const volume = svc.volume?.String || '';
+                  const version = svc.version?.String || '';
+                  const path = svc.path?.String || '';
+                  const status = svc.status; // Предполагается, что статус уже строка
 
-                    console.log(`[Dashboard] Создание узла сервиса для ${svc.name}: ` +
-                                `ID=${svc.id}, Тип=${svc.type}, Статус=${status}, ` +
-                                `Имя K8s деплоя=${k8sDeploymentName}, Реплики=${k8sReplicas}`); // Дополнительная проверка
-                  
-                    return createReactFlowServiceNode(
-                        svc.id,
-                        svc.type, // serviceType
-                        { x: svc.positionX, y: svc.positionY },
-                        svc.name,
-                        svc.projectId,
-                        status, // serviceStatus - теперь гарантированно строка
-                        volume,      // <-- Уже сглаженная строка
-                        version,     // <-- Уже сглаженная строка
-                        path,        // <-- Уже сглаженная строка
-                        k8sDeploymentName, // <-- Уже сглаженная строка
-                        k8sNamespace,
-                        k8sServiceName,
-                        k8sNodePort,     // <-- Уже сглаженное число
-                        k8sReplicas      // <-- Уже сглаженное число
-                    );
-                });
-                console.log("[Dashboard] Сгенерированные serviceNodes (после сглаживания):", serviceNodes); // Лог сгенерированных узлов сервисов
-                const filteredFileServiceNodes = fileNodes.filter(n => n.type === 'serviceNode');
-                // Собираем итоговый набор узлов
-                setNodes([
-                    repoNode,
-                    ...fileNodes.filter(n => n.type !== 'serviceNode'), // Исключаем сервисы, если convertFileNodeToReactFlowElements их тоже создает
-                    ...serviceNodes // Добавляем сервисы из БД
-                ]);
+                  console.log(`[Dashboard] Создание узла сервиса для ${svc.name}: ` +
+                              `ID=${svc.id}, Тип=${svc.type}, Статус=${status}, ` +
+                              `Имя K8s деплоя=${k8sDeploymentName}, Реплики=${k8sReplicas}`); // Дополнительная проверка
 
-                // Сбрасываем рёбра
-                setEdges(fileEdges);
-            
-            
-      
-            // Собираем итоговый набор узлов
-            setNodes([
-              repoNode,
-              ...filteredFileServiceNodes,
-              ...serviceNodes
-            ]);
-      
-            // Сбрасываем рёбра
-            setEdges(fileEdges);
+                  return createReactFlowServiceNode(
+                      svc.id,
+                      svc.type, // serviceType
+                      { x: svc.positionX, y: svc.positionY },
+                      svc.name,
+                      svc.projectId,
+                      status, // serviceStatus - теперь гарантированно строка
+                      volume,      // <-- Уже сглаженная строка
+                      version,     // <-- Уже сглаженная строка
+                      path,        // <-- Уже сглаженная строка
+                      k8sDeploymentName, // <-- Уже сглаженная строка
+                      k8sNamespace,
+                      k8sServiceName,
+                      k8sNodePort,     // <-- Уже сглаженное число
+                      k8sReplicas      // <-- Уже сглаженное число
+                  );
+              });
+              console.log("[Dashboard] Сгенерированные serviceNodes (после сглаживания):", serviceNodes); // Лог сгенерированных узлов сервисов
+
+              // Собираем итоговый набор узлов:
+              // 1. Узел репозитория
+              // 2. Узлы файловой системы, исключая те, что уже являются serviceNode (чтобы не дублировать)
+              // 3. Узлы сервисов, полученные из API
+              setNodes([
+                  repoNode,
+                  ...fileSystemNodes.filter(node => node.type !== 'serviceNode'),
+                  ...serviceNodes
+              ]);
+
+              // Устанавливаем рёбра
+              setEdges(fileSystemEdges);
+
+              console.log("[Dashboard] Все узлы установлены:", setNodes); // Проверка финального состояния nodes
+              console.log("[Dashboard] Все рёбра установлены:", setEdges); // Проверка финального состояния edges
           })
           .catch(err => {
-            console.error('Error fetching dashboard data:', err);
-            setError(err.message || 'Unknown error');
-            setNodes([]);
-            setEdges([]);
+              console.error('[Dashboard] Error fetching dashboard data:', err);
+              setError(err.message || 'Unknown error');
+              setNodes([]);
+              setEdges([]);
           })
           .finally(() => {
-            setLoading(false);
+              setLoading(false);
           });
-      }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges, setStructure]);
+  }, [currentRepoUrl, currentProjectId, navigate, setNodes, setEdges, setStructure]); // Зависимости useCallback
+
       
 
     // Обработчик перетаскивания узлов
