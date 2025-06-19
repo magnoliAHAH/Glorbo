@@ -347,7 +347,6 @@ const DashboardForMain = () => {
               ...filteredFileServiceNodes,
               ...serviceNodes
             ]);
-            console.log("Final nodes array after setting:", nodes);
       
             // Сбрасываем рёбра
             setEdges(fileEdges);

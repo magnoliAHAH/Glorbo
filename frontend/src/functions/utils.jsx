@@ -173,27 +173,30 @@ export function renderFileNodeForSidebar(node, depth = 0) {
  * @returns {JSX.Element} JSX-элемент с деталями сервиса.
  */
 export function renderServiceInfoForSidebar(serviceData) {
+    console.log("[renderServiceInfoForSidebar] Rendering service details:", serviceData); // Лог serviceData, приходящего сюда
+
     if (!serviceData) return <p>No service selected.</p>;
 
     return (
         <div>
-            <h4>Service Details:</h4>
+            <h4 style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>Детали сервиса:</h4>
             <p><strong>ID:</strong> {serviceData.id || 'N/A'}</p>
-            <p><strong>Name:</strong> {serviceData.name || 'N/A'}</p>
-            <p><strong>Type:</strong> {serviceData.serviceType || 'N/A'}</p>
-            <p><strong>Status:</strong> {serviceData.status || 'N/A'}</p>
+            <p><strong>Имя:</strong> {serviceData.name || 'N/A'}</p>
+            <p><strong>Тип:</strong> {serviceData.serviceType || 'N/A'}</p>
+            <p><strong>Статус:</strong> {serviceData.status || 'N/A'}</p>
             {serviceData.position && (
-                <p><strong>Position:</strong> X: {serviceData.position.x?.toFixed(0)}, Y: {serviceData.position.y?.toFixed(0)}</p>
+                <p><strong>Позиция:</strong> X: {serviceData.position.x?.toFixed(0)}, Y: {serviceData.position.y?.toFixed(0)}</p>
             )}
-            {serviceData.version && <p><strong>Version:</strong> {serviceData.version}</p>}
-            {serviceData.volume && <p><strong>Volume:</strong> {serviceData.volume}</p>}
-            {serviceData.projectId && <p><strong>Project ID:</strong> {serviceData.projectId}</p>} {/* Отображаем projectId */}
-            {serviceData.k8sDeploymentName && <p><strong>Deployment:</strong> {serviceData.k8sDeploymentName}</p>}
-            {serviceData.k8sNamespace && <p><strong>Namespace:</strong> {serviceData.k8sNamespace}</p>}
-            {serviceData.k8sServiceName && <p><strong>Service Name:</strong> {serviceData.k8sServiceName}</p>}
-            {serviceData.k8sNodePort !== 0 && <p><strong>Port:</strong> {serviceData.k8sNodePort}</p>}
-            {serviceData.k8sReplicas !== 0 && <p><strong>Replicas:</strong> {serviceData.k8sReplicas}</p>}
+            {serviceData.version && serviceData.version !== '' && <p><strong>Версия:</strong> {serviceData.version}</p>}
+            {serviceData.volume && serviceData.volume !== '' && <p><strong>Volume:</strong> {serviceData.volume}</p>}
+            {serviceData.projectId && <p><strong>Project ID:</strong> {serviceData.projectId}</p>}
             
+            {/* Условное отображение K8s полей */}
+            {serviceData.k8sDeploymentName && serviceData.k8sDeploymentName !== '' && <p><strong>K8s Deployment:</strong> {serviceData.k8sDeploymentName}</p>}
+            {serviceData.k8sNamespace && serviceData.k8sNamespace !== '' && <p><strong>K8s Namespace:</strong> {serviceData.k8sNamespace}</p>}
+            {serviceData.k8sServiceName && serviceData.k8sServiceName !== '' && <p><strong>K8s Service Name:</strong> {serviceData.k8sServiceName}</p>}
+            {serviceData.k8sNodePort !== 0 && <p><strong>K8s NodePort:</strong> {serviceData.k8sNodePort}</p>}
+            {serviceData.k8sReplicas !== 0 && <p><strong>K8s Replicas:</strong> {serviceData.k8sReplicas}</p>}
         </div>
     );
-}
+};
