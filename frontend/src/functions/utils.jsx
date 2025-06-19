@@ -174,7 +174,7 @@ export function renderFileNodeForSidebar(node, depth = 0) {
  */
 export function renderServiceInfoForSidebar(serviceData) {
     if (!serviceData) return <p>No service selected</p>;
-  
+    console.log('serviceData in sidebar:', serviceData);
     const {
       id,
       name,

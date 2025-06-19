@@ -185,6 +185,7 @@ const SidebarContent = styled.div`
 
 const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
     const isServiceNode = content?.type === 'serviceNode'|| content?.type === 'service';
+    
 
     const handleDeleteClick = () => {
         // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
@@ -459,6 +460,7 @@ const DashboardForMain = () => {
         const fullyNormalizedStructure = recursivelyNormalizeFileNode(structure);
         setSidebarContent({ type: 'repo', ...fullyNormalizedStructure, URL: node.data.URL });
     } else if (node.type === 'serviceNode') {
+        console.log('Setting sidebarContent for serviceNode:', node.data);
         setSidebarContent({ type: 'serviceNode', ...node.data });
     } else {
         // Если это не repoNode или serviceNode, и специфичное содержимое сайдбара не требуется, устанавливаем в null
