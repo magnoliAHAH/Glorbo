@@ -316,7 +316,7 @@ func scanDir(path, repoRootPath string, projectID int64, servicesMap map[string]
 			}
 			// Если папка соответствует сервису, обновляем ее тип и данные
 			if isService {
-				child.Type = "prob-service"
+				child.Type = "Folder" // доработать, пока folder
 				child.ServiceType = service.Type
 				child.Status = service.Status
 				child.Volume = service.Volume
