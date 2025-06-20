@@ -188,18 +188,16 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
   
 
   const handleDeleteClick = () => {
-      // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
       if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
-          // Заменяем window.confirm на MessageBox типа 'confirm'
           setShowMessageBox({
               isOpen: true,
               type: 'confirm',
               title: 'Подтверждение удаления',
-              message: `Вы уверены, что хотите удалить сервис "${content.name || content.id}"? Это действие необратимо.`,
+              message: `Вы уверены, что хотите удалить сервис "${content.label || content.name || content.id}"? Это действие необратимо.`,
               onConfirm: async () => { // Делаем onConfirm асинхронным, чтобы дождаться удаления
                   try {
                       // Вызов функции удаления сервиса
-                      await onDeleteNode(content.id, content.projectId); 
+                      await deleteService(content.id, content.projectId); 
                       
                       // Сообщение об успешном удалении
                       setShowMessageBox({
@@ -209,6 +207,9 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
                           message: `Сервис "${content.name || content.id}" успешно удален.`,
                           onClose: () => setShowMessageBox(null)
                       });
+                      // onDeleteNode now only needs to update the React Flow state (remove the node)
+                      // It should NOT call deleteService again, as it's already done here.
+                      onDeleteNode(content.id, content.projectId); 
                       onClose(); // Закрываем сайдбар после успешного удаления
                   } catch (error) {
                       console.error(`Не удалось удалить сервис ${content.id}:`, error.message);
@@ -236,7 +237,6 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
           });
       }
   };
-
   return (
       <SidebarWrapper isOpen={isOpen}>
           <SidebarHeader>
