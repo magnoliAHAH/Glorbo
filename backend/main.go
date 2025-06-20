@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings" // Добавим для работы со строками
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -46,7 +46,7 @@ type Project struct {
 	ID     int64  `json:"id"`
 	UserID string `json:"user_id"`
 	Name   string `json:"name"`
-	URL    string `json:"url,omitempty"` // URL репозитория, связывающий проект с содержимым
+	URL    string `json:"url,omitempty"`
 }
 
 type User struct {
@@ -96,21 +96,21 @@ type FileNode struct {
 // Service - представляет сервис, сохраненный в базе данных
 // Содержит информацию, которая может быть постоянной между сканированиями репозитория
 type Service struct {
-	ID                string         `json:"id"`        // Уникальный ID сервиса
-	ProjectID         int64          `json:"projectId"` // ID проекта, к которому относится сервис
-	Name              string         `json:"name"`      // Имя сервиса (может быть произвольным)
-	Type              string         `json:"type"`      // Тип сервиса (backend, frontend, redis, etc.)
-	Status            string         `json:"status"`    // Статус сервиса
-	Volume            string         `json:"volume"`    // Объем
-	Version           string         `json:"version"`   // Версия
-	Path              string         `json:"path"`      // Относительный путь в репозитории (например, "backend", "frontend/src")
-	PositionX         float64        `json:"positionX"` // Координата X на канвасе
-	PositionY         float64        `json:"positionY"` // Координата Y на канвасе
-	K8sDeploymentName sql.NullString `json:"k8sDeploymentName"`
-	K8sNamespace      sql.NullString `json:"k8sNamespace"`
-	K8sServiceName    sql.NullString `json:"k8sServiceName"`
-	K8sNodePort       sql.NullInt32  `json:"k8sNodePort"` // Используем sql.NullInt32 для int полей, которые могут быть NULL
-	K8sReplicas       sql.NullInt32  `json:"k8sReplicas"`
+	ID                string         `json:"id"`                // Уникальный ID сервиса
+	ProjectID         int64          `json:"projectId"`         // ID проекта, к которому относится сервис
+	Name              string         `json:"name"`              // Имя сервиса (может быть произвольным)
+	Type              string         `json:"type"`              // Тип сервиса (backend, frontend, redis, etc.)
+	Status            string         `json:"status"`            // Статус сервиса
+	Volume            string         `json:"volume"`            // Объем
+	Version           string         `json:"version"`           // Версия
+	Path              string         `json:"path"`              // Относительный путь в репозитории (например, "backend", "frontend/src")
+	PositionX         float64        `json:"positionX"`         // Координата X на канвасе
+	PositionY         float64        `json:"positionY"`         // Координата Y на канвасе
+	K8sDeploymentName sql.NullString `json:"k8sDeploymentName"` // Название развёртывания
+	K8sNamespace      sql.NullString `json:"k8sNamespace"`      // Название namespace
+	K8sServiceName    sql.NullString `json:"k8sServiceName"`    // Название сервиса
+	K8sNodePort       sql.NullInt32  `json:"k8sNodePort"`       // Порт наружу
+	K8sReplicas       sql.NullInt32  `json:"k8sReplicas"`       // Количество реплик
 }
 
 // Инициализация Prometheus метрик при запуске приложения
@@ -123,7 +123,7 @@ var k8sClient *kubernetes.Clientset
 // initDB инициализирует подключение к базе данных PostgreSQL
 func initDB() {
 	var err error
-	connStr := "postgres://postgres:password@db/postgres?sslmode=disable" // Замените на актуальные данные
+	connStr := "postgres://postgres:password@db/postgres?sslmode=disable"
 	db, err = sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
@@ -149,7 +149,7 @@ func main() {
 		log.Fatalf("Критическая ошибка при обновлении схемы БД: %v", err)
 	}
 	// Инициализация gRPC клиента для сервиса авторизации
-	client, err := grpcclient.New(ctx, logger, "grpcauth:44044", 2*time.Second, 3) // Уточните адрес gRPC сервиса
+	client, err := grpcclient.New(ctx, logger, "grpcauth:44044", 2*time.Second, 3)
 	if err != nil {
 		log.Fatalf("failed to init gRPC client: %v", err)
 	}
@@ -158,48 +158,40 @@ func main() {
 	// Инициализация маршрутизатора Gorilla Mux
 	router := mux.NewRouter()
 
-	// Регистрация маршрутов
-	router.Handle("/metrics", promhttp.Handler()) // Prometheus метрики
+	// --- 1. Маршруты мониторинга ---
+	// Предоставляет метрики для Prometheus.
+	router.Handle("/metrics", promhttp.Handler())
 
-	// Маршруты для работы с репозиторием и сервисами
-	router.HandleFunc("/api/repo-tree", handleRepoTree).Methods("GET", "OPTIONS")
-	router.Handle("/api/create-service", WithAuth(http.HandlerFunc(handleCreateService))).Methods("POST", "OPTIONS")
-	router.Handle("/api/update-node-position", WithAuth(http.HandlerFunc(handleUpdateNodePosition))).Methods("POST", "OPTIONS")
-
-	// Маршруты для управления проектами
-	router.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
-
-	// Маршруты для аутентификации
+	// --- 2. Маршруты аутентификации ---
+	// Управление регистрацией и входом пользователей.
 	router.HandleFunc("/api/register", handleRegister).Methods("POST", "OPTIONS")
 	router.HandleFunc("/api/login", handleLogin).Methods("POST", "OPTIONS")
 
-	router.Handle(
-		"/api/projects/{project_id}/services/{service_id}",
-		WithAuth(http.HandlerFunc(handleDeleteService)),
-	).Methods("DELETE", "OPTIONS")
+	// --- 3. Маршруты управления проектами ---
+	// Работа с общими операциями над проектами.
+	router.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects))).Methods("GET", "OPTIONS") // Пример, если handleProjects также является GET для списка
 
-	// Маршруты для специфичных сервисов авторизации (связанных с project_id)
-	router.Handle(
-		"/api/projects/{project_id}/auth-services",
-		WithAuth(http.HandlerFunc(handleCreateAuthService)),
-	).Methods("POST", "OPTIONS")
+	// --- 4. Маршруты для репозиториев и сервисов ---
+	// Работа с получением структуры репозитория и общими операциями над сервисами.
+	router.HandleFunc("/api/repo-tree", handleRepoTree).Methods("GET", "OPTIONS")                                                                   // Получение структуры репозитория
+	router.Handle("/api/create-service", WithAuth(http.HandlerFunc(handleCreateService))).Methods("POST", "OPTIONS")                                // Создание общего сервиса
+	router.Handle("/api/update-node-position", WithAuth(http.HandlerFunc(handleUpdateNodePosition))).Methods("POST", "OPTIONS")                     // Обновление позиции узла
+	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails))).Methods("GET", "OPTIONS")  // Получение деталей конкретного сервиса
+	router.Handle("/api/projects/{project_id}/services", WithAuth(http.HandlerFunc(handleGetServicesByProjectID))).Methods("GET", "OPTIONS")        // Получение всех сервисов проекта
+	router.Handle("/api/projects/{project_id}/services/{service_id}", WithAuth(http.HandlerFunc(handleDeleteService))).Methods("DELETE", "OPTIONS") // Удаление сервиса
 
-	router.Handle("/api/projects/{project_id}/services", WithAuth(http.HandlerFunc(handleGetServicesByProjectID))).Methods("GET", "OPTIONS")
-	// Маршруты для получения пользователей проекта
-	router.Handle(
-		"/api/projects/{project_id}/users",
-		WithAuth(http.HandlerFunc(getUsersHandler)),
-	).Methods("GET", "OPTIONS")
+	// --- 5. Маршруты для специфичных типов сервисов / операций Kubernetes ---
+	// Маршруты, связанные с развертыванием и управлением специфичными K8s ресурсами.
+	router.Handle("/api/projects/{project_id}/auth-services", WithAuth(http.HandlerFunc(handleCreateAuthService))).Methods("POST", "OPTIONS")    // Создание сервиса аутентификации
+	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePodAndService))).Methods("POST", "OPTIONS")           // Создание Pod и Service
+	router.Handle("/api/projects/{project_id}/deploys", WithAuth(http.HandlerFunc(handleCreateDeploymentAndService))).Methods("POST", "OPTIONS") // Создание Deployment и Service
+	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")                                 // Выполнение задач (например, сборка, деплой)
 
-	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePodAndService))).Methods("POST", "OPTIONS")
+	// --- 6. Маршруты для пользователей проекта (если они отличаются от общей работы с проектами) ---
+	router.Handle("/api/projects/{project_id}/users", WithAuth(http.HandlerFunc(getUsersHandler))).Methods("GET", "OPTIONS") // Получение пользователей проекта
 
-	router.Handle("/api/projects/{project_id}/deploys", WithAuth(http.HandlerFunc(handleCreateDeploymentAndService))).Methods("POST", "OPTIONS")
-
-	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")
-
-	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails))).Methods("GET", "OPTIONS")
-
-	router.Handle("/api/delete-resources", WithAuth(http.HandlerFunc(handleDeleteResources))).Methods("DELETE", "OPTIONS")
+	// --- 7. Маршруты для управления ресурсами (админские/очистка) ---
+	router.Handle("/api/delete-resources", WithAuth(http.HandlerFunc(handleDeleteResources))).Methods("DELETE", "OPTIONS") // Удаление всех ресурсов (осторожно!)
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
@@ -227,8 +219,6 @@ func createTables() error {
 			ON DELETE CASCADE
 	);`
 
-	// Добавим project_id в таблицу apps, если его нет
-	// Это нужно, чтобы связать приложения (auth-сервисы) с проектами
 	alterAppsTableSQL := `
 	DO $$
 	BEGIN
@@ -238,7 +228,6 @@ func createTables() error {
 	END
 	$$;`
 
-	// Добавим внешний ключ apps.project_id к projects.id
 	addForeignKeySQL := `
 	DO $$
 	BEGIN
@@ -261,10 +250,6 @@ func createTables() error {
 	}
 	log.Println("Apps table project_id column checked/added.")
 
-	// Для существующих apps, у которых project_id NULL, можно установить его,
-	// если есть логика для определения, к какому проекту они относятся.
-	// UPDATE apps SET project_id = (SELECT id FROM projects WHERE name = 'default_project' LIMIT 1) WHERE project_id IS NULL;
-
 	_, err = db.Exec(addForeignKeySQL)
 	if err != nil {
 		return fmt.Errorf("failed to add foreign key to apps table: %w", err)
@@ -276,13 +261,13 @@ func createTables() error {
 
 // generateUUID генерирует уникальный ID (UUIDv4) для узлов и сервисов
 func generateUUID() string {
-	b := make([]byte, 16) // 32 байта = 256 бит
+	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		log.Fatalf("Error generating UUID: %v", err) // Если не удается сгенерировать, это критическая ошибка
+		log.Fatalf("Error generating UUID: %v", err)
 	}
 	// Устанавливаем биты для UUIDv4
-	b[6] = (b[6] & 0x0F) | 0x40 // Version 4
-	b[8] = (b[8] & 0x3F) | 0x80 // Variant 10xx
+	b[6] = (b[6] & 0x0F) | 0x40
+	b[8] = (b[8] & 0x3F) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
@@ -290,7 +275,7 @@ func generateUUID() string {
 // и интегрирует данные о сервисах из БД.
 func scanDir(path, repoRootPath string, projectID int64, servicesMap map[string]Service) (FileNode, error) {
 	node := FileNode{
-		ID:   generateUUID(), // Генерируем ID для каждой папки
+		ID:   generateUUID(),
 		Name: filepath.Base(path),
 		Type: "folder",
 	}
@@ -330,12 +315,12 @@ func scanDir(path, repoRootPath string, projectID int64, servicesMap map[string]
 				child.Version = service.Version
 				child.Position = &Position{X: service.PositionX, Y: service.PositionY}
 				child.ProjectID = sql.NullInt64{Int64: service.ProjectID, Valid: true}
-				child.ID = service.ID // Используем ID сервиса из БД
+				child.ID = service.ID
 			}
 			node.Children = append(node.Children, child)
 		} else { // Это файл
 			fileNode := FileNode{
-				ID:   generateUUID(), // Генерируем ID для каждого файла
+				ID:   generateUUID(),
 				Name: entry.Name(),
 				Type: "file",
 			}
@@ -348,16 +333,8 @@ func scanDir(path, repoRootPath string, projectID int64, servicesMap map[string]
 				fileNode.Version = service.Version
 				fileNode.Position = &Position{X: service.PositionX, Y: service.PositionY}
 				fileNode.ProjectID = sql.NullInt64{Int64: service.ProjectID, Valid: true}
-				fileNode.ID = service.ID // Используем ID сервиса из БД
+				fileNode.ID = service.ID
 			}
-			// Опционально: читать содержимое небольших файлов
-			// fileInfo, _ := entry.Info()
-			// if fileInfo != nil && fileInfo.Size() < 1024*10 { // например, файлы до 10KB
-			// 	contentBytes, readErr := os.ReadFile(fullPath)
-			// 	if readErr == nil {
-			// 		fileNode.Content = string(contentBytes)
-			// 	}
-			// }
 			node.Children = append(node.Children, fileNode)
 		}
 	}
@@ -368,9 +345,9 @@ func scanDir(path, repoRootPath string, projectID int64, servicesMap map[string]
 // Она клонирует репозиторий, сканирует его и обогащает данными о сервисах из БД.
 func handleRepoTree(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru") // Уточните ваш домен
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Добавляем POST для создания сервисов
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
 	requestsTotal.WithLabelValues("/api/repo-tree", r.Method).Inc()
 
@@ -379,7 +356,7 @@ func handleRepoTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	repoURL := r.URL.Query().Get("repo") // URL репозитория
+	repoURL := r.URL.Query().Get("repo")
 	if repoURL == "" {
 		http.Error(w, "Missing 'repo' query param (repository URL)", http.StatusBadRequest)
 		return
@@ -418,7 +395,7 @@ func handleRepoTree(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not create temp dir", http.StatusInternalServerError)
 		return
 	}
-	defer os.RemoveAll(tmpDir) // Удаляем временную директорию после обработки
+	defer os.RemoveAll(tmpDir)
 
 	// Клонируем репозиторий
 	cmd := exec.Command("git", "clone", "--depth=1", repoURL, tmpDir)
@@ -436,8 +413,6 @@ func handleRepoTree(w http.ResponseWriter, r *http.Request) {
 
 	// Путь к корневой папке клонированного репозитория (внутри tmpDir)
 	repoRootPath := filepath.Join(tmpDir, repoName)
-	// В некоторых случаях git clone может клонировать прямо в tmpDir, а не tmpDir/repoName
-	// Проверим, существует ли repoRootPath, иначе используем tmpDir
 	_, err = os.Stat(repoRootPath)
 	if os.IsNotExist(err) {
 		repoRootPath = tmpDir
@@ -453,8 +428,8 @@ func handleRepoTree(w http.ResponseWriter, r *http.Request) {
 
 	// Обновляем корневой узел
 	structure.Name = repoName
-	structure.ID = fmt.Sprintf("repo-root-%d", projectID) // Уникальный ID для корня репозитория
-	structure.Type = "repo"                               // Отмечаем корневой узел как "repo"
+	structure.ID = fmt.Sprintf("repo-root-%d", projectID)
+	structure.Type = "repo"
 	structure.ProjectID = sql.NullInt64{Int64: projectID, Valid: true}
 
 	// Отправляем JSON-ответ
@@ -581,22 +556,18 @@ func handleCreateService(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateNodePosition обновляет позицию узла (сервиса) в БД
 func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
-	// Установка CORS-заголовков для POST-запроса
-	// Gorilla Mux должен настроить их для OPTIONS-запросов отдельно
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization") // Укажите все заголовки, используемые фронтендом
-	w.Header().Set("Access-Control-Allow-Methods", "POST")                        // В этом обработчике ожидаем только POST
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "POST")
 
 	// Проверка авторизации: если middleware WithAuth работает правильно,
 	// userIDKey должен быть в контексте.
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
-		// Это не должно произойти, если WithAuth работает, но как запасной вариант.
 		http.Error(w, "Unauthorized: User ID not found in context", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // Если нужен ID пользователя, раскомментируйте
 
 	// Декодирование тела запроса (NodeID, Position, ProjectID)
 	var req struct {
@@ -606,7 +577,6 @@ func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	decoder := json.NewDecoder(r.Body)
-	// decoder.DisallowUnknownFields() // Уберем для простоты, если есть проблемы с парсингом
 
 	if err := decoder.Decode(&req); err != nil {
 		log.Printf("ERROR: Failed to decode request body: %v", err)
@@ -621,7 +591,6 @@ func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Обновление позиции в базе данных
-	// Важно: обновление происходит только для узла с данным ID ВНУТРИ данного ProjectID
 	result, err := db.Exec(`
 		UPDATE services
 		SET position_x = $1, position_y = $2
@@ -637,12 +606,9 @@ func handleUpdateNodePosition(w http.ResponseWriter, r *http.Request) {
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		log.Printf("ERROR: Failed to get rows affected after update: %v", err)
-		// Не возвращаем ошибку пользователю, это внутренняя проблема.
 	}
 
 	if rowsAffected == 0 {
-		// Если 0 строк затронуто, значит, либо такого узла нет, либо он не в этом проекте,
-		// либо позиции не изменились.
 		log.Printf("INFO: No changes made or node %s not found for project %d.", req.NodeID, req.ProjectID)
 		http.Error(w, "Node not found or position already up-to-date", http.StatusNotFound)
 		return
@@ -707,10 +673,8 @@ func getServicesByProjectID(projectID int64) ([]Service, error) {
 }
 
 func handleGetServicesByProjectID(w http.ResponseWriter, r *http.Request) {
-	requestsTotal.WithLabelValues(r.URL.Path, r.Method).Inc() // Метрика Prometheus
-
-	// Устанавливаем CORS заголовки (если не используете middleware для этого)
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Замените на домен вашего фронтенда
+	requestsTotal.WithLabelValues(r.URL.Path, r.Method).Inc()
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
@@ -750,7 +714,7 @@ func handleGetServicesByProjectID(w http.ResponseWriter, r *http.Request) {
 
 // generateSecret генерирует случайную строку для секрета
 func generateSecret() string {
-	b := make([]byte, 32) // 256-битный секрет
+	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		log.Printf("Failed to generate secret: %v", err)
 		return ""
@@ -758,59 +722,13 @@ func generateSecret() string {
 	return hex.EncodeToString(b)
 }
 
-// createAuthServiceDB создает запись о новом сервисе аутентификации (приложении) в БД
-// Обратите внимание: apps.project_id может быть NULL, если не установлен.
-// В идеале, он должен быть NOT NULL и заполняться при создании проекта,
-// или привязываться к проекту сразу при создании auth-сервиса.
-func createAuthServiceDB(appName, secret, projectIDStr string) error {
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid project_id: %w", err)
-	}
-
-	// Проверяем, существует ли проект с таким ID
-	var exists bool
-	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1)", projectID).Scan(&exists)
-	if err != nil {
-		return fmt.Errorf("database error checking project existence: %w", err)
-	}
-	if !exists {
-		return fmt.Errorf("project with ID %d does not exist", projectID)
-	}
-
-	// Вставляем в таблицу apps.
-	// app_id будет сгенерирован автоматически, если это SERIAL PRIMARY KEY.
-	// name - это имя приложения, которое пользователь ввел.
-	// secret - это сгенерированный секрет.
-	// project_id - это projectID, к которому привязан auth-сервис.
-	query := `INSERT INTO apps (name, secret, project_id) VALUES ($1, $2, $3)`
-	_, err = db.Exec(query, appName, secret, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to insert auth service into apps table: %w", err)
-	}
-	log.Printf("Auth service '%s' created for project ID %d", appName, projectID)
-	return nil
-}
-
 // handleCreateAuthService создает новый сервис авторизации (приложение) для проекта
 func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
-	// --- CORS-заголовки ---
-	// ВНИМАНИЕ: Если вы разделили обработчики OPTIONS и POST в main.go,
-	// то 'Access-Control-Allow-Methods' для POST запроса может быть просто "POST".
-	// Однако, оставляем его полным для обеспечения совместимости, если не разделено.
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
-	// --- Метрики (если используются) ---
-	// if requestsTotal != nil {
-	// 	requestsTotal.WithLabelValues("/api/projects/{project_id}/auth-services", r.Method).Inc()
-	// }
-
-	// --- Обработка OPTIONS-запросов (preflight) ---
-	// Если этот маршрут обрабатывается Gorilla Mux только для POST,
-	// а OPTIONS обрабатывается отдельно, этот блок можно убрать.
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -820,18 +738,17 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- Проверка авторизации ---
+	// Проверка авторизации
 	raw := r.Context().Value(userIDKey)
 	if raw == nil {
 		log.Println("Unauthorized attempt to create auth service: User ID not found in context.")
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// userID := raw.(string) // ID авторизованного пользователя, если нужен для проверки прав
 
-	// --- Декодирование тела запроса ---
+	// Декодирование тела запроса
 	var req struct {
-		Name string `json:"name"` // Имя приложения для аутентификации
+		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Printf("ERROR: Invalid request body for creating auth service: %v", err)
@@ -844,7 +761,7 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- Получение project_id из URL ---
+	// Получение project_id из URL
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
 	if !ok || projectIDStr == "" {
@@ -859,12 +776,9 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- Создание секрета для нового приложения ---
-	secret := generateSecret() // Предполагаем, что generateSecret() определена
-
-	// --- ШАГ 1: Вставляем новую запись в таблицу 'apps' ---
-	var newAppID int64 // Используем int64 для соответствия BIGINT в БД
-	// Используем RETURNING id для получения ID сразу после вставки
+	// Создание секрета для нового приложения
+	secret := generateSecret()
+	var newAppID int64
 	err = db.QueryRow(`
 		INSERT INTO apps (name, secret, project_id)
 		VALUES ($1, $2, $3)
@@ -872,7 +786,6 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 	`, req.Name, secret, projectID).Scan(&newAppID)
 	if err != nil {
 		log.Printf("ERROR: Failed to insert new app (auth service) into 'apps' table: %v", err)
-		// Проверяем на ошибку уникального ключа (если имя уже занято)
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
 			http.Error(w, "App name already exists for this project or globally", http.StatusConflict)
 		} else {
@@ -882,12 +795,11 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("INFO: Successfully created app (auth service) in 'apps' table with ID: %d", newAppID)
 
-	// --- ШАГ 2: Вставляем соответствующую запись в таблицу 'services' ---
-	// Этот ID будет использоваться фронтендом для React Flow узла
-	serviceNodeID := fmt.Sprintf("auth-%d", newAppID) // Формат ID должен соответствовать фронтенду!
-	serviceNameForDashboard := req.Name + " (Auth)"   // Более наглядное имя для дашборда
-	serviceTypeForDashboard := "authentication"       // Тип сервиса для дашборда
-	servicePathForDashboard := "auth"                 // Относительный путь, может быть пустым
+	// Вставляем соответствующую запись в таблицу 'services'
+	serviceNodeID := fmt.Sprintf("auth-%d", newAppID)
+	serviceNameForDashboard := req.Name + " (Auth)"
+	serviceTypeForDashboard := "authentication"
+	servicePathForDashboard := "auth"
 
 	_, err = db.Exec(`
 		INSERT INTO services (id, project_id, name, type, status, volume, version, path, position_x, position_y)
@@ -895,20 +807,18 @@ func handleCreateAuthService(w http.ResponseWriter, r *http.Request) {
 	`, serviceNodeID, projectID, serviceNameForDashboard, serviceTypeForDashboard, "pending", "", "", servicePathForDashboard, 0.0, 0.0) // Начальные позиции 0,0
 	if err != nil {
 		log.Printf("ERROR: Failed to insert service node for auth app (ID: %d) into 'services' table: %v", newAppID, err)
-		// ВНИМАНИЕ: Если здесь произошла ошибка, запись в 'apps' уже создана.
-		// В продакшене вам, возможно, понадобится транзакция, чтобы откатить вставку в 'apps'.
 		http.Error(w, fmt.Sprintf("Failed to create associated dashboard service: %v", err), http.StatusInternalServerError)
 		return
 	}
 	log.Printf("INFO: Successfully created service node in 'services' table with ID: %s for app ID: %d", serviceNodeID, newAppID)
 
-	// --- Успешный ответ ---
+	// Успешный ответ
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":        "created",
 		"secret":        secret,
-		"authServiceId": newAppID,      // ID из таблицы 'apps'
-		"serviceNodeId": serviceNodeID, // ID, который будет у узла на дашборде
+		"authServiceId": newAppID,
+		"serviceNodeId": serviceNodeID,
 		"message":       fmt.Sprintf("Auth service '%s' created and added to dashboard.", req.Name),
 	})
 }
@@ -947,7 +857,7 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 		var projects []Project
 		for rows.Next() {
 			var p Project
-			var url sql.NullString // Используем sql.NullString для nullable URL
+			var url sql.NullString
 			if err := rows.Scan(&p.ID, &p.Name, &url); err != nil {
 				log.Printf("Error scanning project row: %v", err)
 				continue
@@ -955,7 +865,7 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 			if url.Valid {
 				p.URL = url.String
 			}
-			p.UserID = userID // Устанавливаем user_id, так как он не выбирается напрямую
+			p.UserID = userID
 			projects = append(projects, p)
 		}
 		json.NewEncoder(w).Encode(projects)
@@ -996,9 +906,9 @@ func handleProjects(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// getUsersHandler retrieves users associated with a specific app within a project.
-// This function needs further development based on how 'apps' and 'users' are truly linked
-// and how 'project_id' relates to the app/user context.
+// getUsersHandler извлекает пользователей, связанных с определенным приложением в проекте.
+// Эта функция нуждается в дальнейшей разработке на основе того, как 'apps' и 'users' действительно связаны
+// и как 'project_id' относится к контексту приложения/пользователя.
 func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
@@ -1017,7 +927,6 @@ func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	// authenticatedUserID := raw.(string) // The ID of the user making the request
 
 	vars := mux.Vars(r)
 	projectIDStr, ok := vars["project_id"]
@@ -1032,17 +941,6 @@ func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// --- Logic to fetch users for the given project_id ---
-	// This assumes:
-	// 1. There's a relationship between 'projects' and 'apps' (auth services)
-	// 2. There's a relationship between 'apps' and 'users'
-	// This is a placeholder; you'll need to adjust the SQL query based on your actual schema
-	// and how users are linked to specific authentication services (apps) within a project.
-
-	// Example: Fetch users associated with apps belonging to this project
-	// This assumes:
-	// - 'users' table has a 'app_id' column
-	// - 'apps' table has a 'project_id' column
 	rows, err := db.Query(`
         SELECT u.id, u.email, u.app_id
         FROM users u
@@ -1072,9 +970,9 @@ func getUsersHandler(w http.ResponseWriter, r *http.Request) {
 // WithAuth - Middleware для проверки аутентификации пользователя по JWT токену из куки
 func WithAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru") // Уточните ваш домен
+		w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS") // Добавил POST, OPTIONS
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		// Обработка Preflight-запросов CORS
@@ -1096,7 +994,7 @@ func WithAuth(next http.Handler) http.Handler {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
-			return []byte("test-secret"), nil // !!! В продакшене используйте сложный секрет из переменных окружения
+			return []byte("test-secret"), nil
 		})
 		if err != nil || !token.Valid {
 			log.Printf("Token parse/valid error: %v", err)
@@ -1133,7 +1031,7 @@ func WithAuth(next http.Handler) http.Handler {
 
 // handleRegister обрабатывает запросы на регистрацию нового пользователя
 func handleRegister(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru") // Уточните ваш домен
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
@@ -1151,7 +1049,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	type reqBody struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
-		AppID    int32  `json:"app_id"` // AppID пока не используется в регистрации, но может понадобиться
+		AppID    int32  `json:"app_id"`
 	}
 
 	var req reqBody
@@ -1172,7 +1070,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 // handleLogin обрабатывает запросы на вход пользователя
 func handleLogin(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru") // Уточните ваш домен
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
@@ -1190,7 +1088,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	type reqBody struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
-		AppID    int32  `json:"app_id"` // AppID пока не используется в логине, но может понадобиться
+		AppID    int32  `json:"app_id"`
 	}
 
 	var req reqBody
@@ -1209,7 +1107,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Name:     "token",
 		Value:    token,
 		HttpOnly: true,
-		Secure:   true, // true для HTTPS
+		Secure:   true,
 		Path:     "/",
 		SameSite: http.SameSiteLaxMode,
 	})
@@ -1316,10 +1214,10 @@ func handleDeleteService(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreatePodRequest struct {
-	Namespace     string            `json:"namespace"`     // куда создавать
-	PodName       string            `json:"podName"`       // имя Pod
-	Image         string            `json:"image"`         // образ контейнера
-	Env           map[string]string `json:"env,omitempty"` // переменные окружения
+	Namespace     string            `json:"namespace"`
+	PodName       string            `json:"podName"`
+	Image         string            `json:"image"`
+	Env           map[string]string `json:"env,omitempty"`
 	Command       []string          `json:"command,omitempty"`
 	Args          []string          `json:"args,omitempty"`
 	Labels        map[string]string `json:"labels,omitempty"`
@@ -1514,7 +1412,7 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Git volume mount path (общий путь в init-контейнере и основном контейнере)
+		// общий путь в init-контейнере и основном контейнере
 		sharedVolumeName := "build-source"
 		sharedVolumePath := "/workspace"
 
@@ -1590,17 +1488,17 @@ func handleExecuteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 type CreateDeploymentRequest struct {
-	ProjectID      int64             `json:"projectId"`      // ID проекта для БД
-	ServiceType    string            `json:"serviceType"`    // Тип сервиса (например, "frontend")
-	DeploymentName string            `json:"deploymentName"` // Имя для Deployment (будет также использоваться для Pods/Service селектора)
+	ProjectID      int64             `json:"projectId"`
+	ServiceType    string            `json:"serviceType"`
+	DeploymentName string            `json:"deploymentName"`
 	Namespace      string            `json:"namespace"`
 	Image          string            `json:"image"`
 	ContainerPort  int32             `json:"containerPort"`
 	Env            map[string]string `json:"env,omitempty"`
 	Command        []string          `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
-	Labels         map[string]string `json:"labels,omitempty"`   // Дополнительные лейблы
-	Replicas       *int32            `json:"replicas,omitempty"` // Количество реплик
+	Labels         map[string]string `json:"labels,omitempty"`
+	Replicas       *int32            `json:"replicas,omitempty"`
 
 	// Дополнительные поля для сохранения в БД (как в вашей таблице 'services')
 	Position *Position `json:"position,omitempty"`
@@ -1654,26 +1552,26 @@ func createDeploymentAndServiceK8s(req *CreateDeploymentRequest) (*appsv1.Deploy
 		return nil, nil, fmt.Errorf("ошибка получения Namespace %s: %v", req.Namespace, err)
 	}
 
-	// --- Создание Deployment ---
+	// Создание Deployment
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deploymentName,
 			Namespace: req.Namespace,
-			Labels:    podLabels, // Лейблы для самого Deployment
+			Labels:    podLabels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas, // Желаемое количество реплик
 			Selector: &metav1.LabelSelector{
-				MatchLabels: podLabels, // Селектор Deployment'а должен соответствовать лейблам Pod'ов
+				MatchLabels: podLabels, // Селектор Deployment должен соответствовать лейблам Pod
 			},
-			Template: corev1.PodTemplateSpec{ // Шаблон Pod'а, который Deployment будет создавать
+			Template: corev1.PodTemplateSpec{ // Шаблон Pod, который Deployment будет создавать
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: podLabels, // Лейблы для каждого Pod'а
+					Labels: podLabels, // Лейблы для каждого Pod
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  deploymentName, // Имя контейнера внутри Pod'а (можно использовать имя Deployment)
+							Name:  deploymentName, // Имя контейнера внутри Pod
 							Image: req.Image,
 							Ports: []corev1.ContainerPort{
 								{ContainerPort: req.ContainerPort},
@@ -1699,16 +1597,16 @@ func createDeploymentAndServiceK8s(req *CreateDeploymentRequest) (*appsv1.Deploy
 	}
 	log.Printf("Deployment %s создан в Namespace %s с %d репликами", deploymentName, req.Namespace, replicas)
 
-	// --- Создание Service для экспозиции Deployment ---
-	serviceName := fmt.Sprintf("%s-svc", deploymentName) // Имя Service на основе имени Deployment
+	// Создание Service для экспозиции Deployment
+	serviceName := fmt.Sprintf("%s-svc", deploymentName)
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      serviceName,
 			Namespace: req.Namespace,
-			Labels:    podLabels, // Лейблы для Service
+			Labels:    podLabels,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: podLabels, // Селектор Service должен соответствовать лейблам Pod'ов
+			Selector: podLabels,
 			Ports: []corev1.ServicePort{
 				{
 					Protocol:   corev1.ProtocolTCP,
@@ -1723,7 +1621,7 @@ func createDeploymentAndServiceK8s(req *CreateDeploymentRequest) (*appsv1.Deploy
 
 	createdService, err := clientset.CoreV1().Services(req.Namespace).Create(context.TODO(), service, metav1.CreateOptions{})
 	if err != nil {
-		// Если Service не создался, желательно удалить созданный Deployment
+		// Если Service не создался, то удаляем созданный Deployment
 		_ = clientset.AppsV1().Deployments(req.Namespace).Delete(context.TODO(), deploymentName, metav1.DeleteOptions{})
 		return createdDeployment, nil, fmt.Errorf("ошибка создания Service %s: %v", serviceName, err)
 	}
@@ -1737,8 +1635,6 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-
-	// requestsTotal.WithLabelValues("/api/create-deployment-service", r.Method).Inc() // Раскомментируйте, если используете Prometheus
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
@@ -1781,20 +1677,17 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
 		req.Position = &Position{X: 0, Y: 0}
 	}
 
-	// --- Создание Deployment и Service в Kubernetes ---
-	deployment, svc, err := createDeploymentAndServiceK8s(&req) // Используем новую функцию
+	// Создание Deployment и Service в Kubernetes
+	deployment, svc, err := createDeploymentAndServiceK8s(&req)
 	if err != nil {
 		log.Printf("Failed to create deployment or service in Kubernetes: %v", err)
 		http.Error(w, "Failed to create deployment or service in Kubernetes: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// --- Логика сохранения в базу данных ---
-	// Генерируем ID сервиса для БД (отдельно от K8s имён), чтобы иметь уникальный ID для фронтенда
+	// Логика сохранения в базу данных
 	serviceID := generateUUID()
 
-	// Вставляем или обновляем запись в таблице services
-	// Имя сервиса для БД берем из req.DeploymentName
 	_, err = db.Exec(`
         INSERT INTO services
             (id, project_id, name, type, status, volume, version, path, position_x, position_y,
@@ -1814,10 +1707,10 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
             k8s_namespace = EXCLUDED.k8s_namespace,
             k8s_service_name = EXCLUDED.k8s_service_name,
             k8s_node_port = EXCLUDED.k8s_node_port,
-            k8s_replicas = EXCLUDED.k8s_replicas;`, // Добавлена ON CONFLICT для обновления существующих записей
+            k8s_replicas = EXCLUDED.k8s_replicas;`,
 		serviceID,
 		req.ProjectID,
-		req.DeploymentName, // Имя сервиса для отображения (берем из DeploymentName запроса)
+		req.DeploymentName,
 		req.ServiceType,
 		"Running", // Статус после успешного деплоя
 		req.Volume,
@@ -1825,10 +1718,10 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
 		req.Path,
 		req.Position.X,
 		req.Position.Y,
-		deployment.Name, // Имя K8s Deployment
-		req.Namespace,   // Namespace Deployment и Service
-		svc.Name,        // Имя K8s Service
-		func() int32 { // Получаем NodePort из Service, если он есть
+		deployment.Name,
+		req.Namespace,
+		svc.Name,
+		func() int32 {
 			if len(svc.Spec.Ports) > 0 && svc.Spec.Ports[0].NodePort != 0 {
 				return svc.Spec.Ports[0].NodePort
 			}
@@ -1838,20 +1731,19 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		log.Printf("DB insert/update failed for new K8s service %s (Deployment %s): %v", req.DeploymentName, deployment.Name, err)
-		// В случае ошибки БД, рассмотрите возможность удаления созданных K8s ресурсов.
 		http.Error(w, "Failed to save service info to database", http.StatusInternalServerError)
 		return
 	}
 	log.Printf("Service %s (ID: %s, Deployment: %s) saved/updated in DB for ProjectID %d", req.DeploymentName, serviceID, deployment.Name, req.ProjectID)
 
-	// --- Ответ фронтенду ---
+	// Ответ фронтенду
 	resp := struct {
-		ServiceID      string `json:"serviceId"`      // ID сервиса из БД
-		DeploymentName string `json:"deploymentName"` // Имя Deployment в K8s
+		ServiceID      string `json:"serviceId"`
+		DeploymentName string `json:"deploymentName"`
 		Namespace      string `json:"namespace"`
-		ServiceK8sName string `json:"serviceK8sName"` // Имя Service в K8s
+		ServiceK8sName string `json:"serviceK8sName"`
 		NodePort       int32  `json:"nodePort,omitempty"`
-		Replicas       int32  `json:"replicas"` // Количество реплик
+		Replicas       int32  `json:"replicas"`
 	}{
 		ServiceID:      serviceID,
 		DeploymentName: deployment.Name,
@@ -1872,7 +1764,6 @@ func handleCreateDeploymentAndService(w http.ResponseWriter, r *http.Request) {
 func addK8sColumnsToServicesTable(db *sql.DB) error {
 	log.Println("Проверка и добавление колонок Kubernetes в таблицу 'services'...")
 
-	// Добавление колонки k8s_deployment_name (TEXT)
 	query1 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_deployment_name TEXT;
@@ -1883,7 +1774,6 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 	}
 	log.Println("Колонка 'k8s_deployment_name' проверена/добавлена.")
 
-	// Добавление колонки k8s_namespace (TEXT)
 	query2 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_namespace TEXT;
@@ -1894,7 +1784,6 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 	}
 	log.Println("Колонка 'k8s_namespace' проверена/добавлена.")
 
-	// Добавление колонки k8s_service_name (TEXT)
 	query3 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_service_name TEXT;
@@ -1905,7 +1794,6 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 	}
 	log.Println("Колонка 'k8s_service_name' проверена/добавлена.")
 
-	// Добавление колонки k8s_node_port (INTEGER)
 	query4 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_node_port INTEGER;
@@ -1916,7 +1804,6 @@ func addK8sColumnsToServicesTable(db *sql.DB) error {
 	}
 	log.Println("Колонка 'k8s_node_port' проверена/добавлена.")
 
-	// Добавление колонки k8s_replicas (INTEGER)
 	query5 := `
 		ALTER TABLE services
 		ADD COLUMN IF NOT EXISTS k8s_replicas INTEGER;
