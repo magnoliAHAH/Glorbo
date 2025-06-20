@@ -72,6 +72,7 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
 }
 
 /**
+/**
  * Создает новый узел React Flow для сервиса.
  * @param {string} id - Уникальный ID узла.
  * @param {string} serviceType - Тип сервиса (e.g., 'backend', 'authentication').
@@ -80,24 +81,42 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
  * @param {number} projectId - ID проекта, к которому принадлежит сервис.
  * @returns {object} Объект узла React Flow.
  */
-export function createReactFlowServiceNode(id, serviceType, position, name, projectId, serviceStatus) {
+export function createReactFlowServiceNode(
+    id,
+    serviceType,
+    position,
+    name,
+    projectId,
+    serviceStatus,
+    k8sDeploymentName = null,
+    k8sNamespace = null,
+    k8sServiceName = null,
+    k8sNodePort = null,
+    k8sReplicas = null
+  ) {
     return {
-        id: id,
-        position: position,
-        type: 'serviceNode',
-        data: {
-            id: id, // Добавляем ID в data для удобства
-            name: name || `${serviceType}-service`, // Используем переданное имя, если есть
-            type: 'service', // Общий тип
-            serviceType: serviceType, // Специфический тип сервиса
-            status: serviceStatus, // Начальный статус
-            volume: '',
-            version: '',
-            projectId: projectId, // Включаем ProjectID в данные узла
-        },
-        draggable: true, // Новый сервис должен быть перетаскиваемым
+      id,
+      type: 'serviceNode',
+      position,
+      data: {
+        id,
+        name: name || `${serviceType}-service`,
+        type: 'service',
+        serviceType,
+        status: serviceStatus,
+        volume: '',
+        version: '',
+        projectId,
+        k8sDeploymentName,
+        k8sNamespace,
+        k8sServiceName,
+        k8sNodePort,
+        k8sReplicas
+      },
+      draggable: true
     };
-}
+  }
+  
 
 /**
  * Рекурсивная функция для рендеринга файловой структуры для сайдбара.

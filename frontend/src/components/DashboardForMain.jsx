@@ -258,7 +258,6 @@ const DashboardForMain = () => {
     const [contextMenu, setContextMenu] = useState(null);
 
     const [showMessageBox, setShowMessageBox] = useState(null);
-    const [rawServiceNodes, setRawServiceNodes] = useState([]);
 
 
     const navigate = useNavigate();
@@ -345,7 +344,6 @@ const DashboardForMain = () => {
             }));
             
             // Сохраняем этот список для дальнейшего использования
-            setRawServiceNodes(rawList);
           
             // А дальше уже строим React Flow–ноды из того же rawList:
             const serviceNodes = rawList.map(nodeData =>
@@ -363,7 +361,7 @@ const DashboardForMain = () => {
                 nodeData.k8sReplicas
               )
             );
-            console.log("сырое", rawServiceNodes)
+            
             // Собираем итоговый набор узлов
             setNodes([
               repoNode,
