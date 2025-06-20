@@ -15,7 +15,7 @@ import 'reactflow/dist/style.css';
 import MessageBox from './MessageBox';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask, deleteK8sResources } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -183,74 +183,82 @@ const SidebarContent = styled.div`
     }
 `;
 
-const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
-    const isServiceNode = content?.type === 'serviceNode'|| content?.type === 'service';
-    
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, setShowMessageBox }) => {
+  const isServiceNode = content?.type === 'serviceNode'|| content?.type === 'service';
+  
 
-    const handleDeleteClick = () => {
-      if (!isServiceNode || !content?.id || typeof content?.projectId !== 'number') {
-        console.warn('Not a service node or missing ID/ProjectID:', content);
-        return;
-      }
-      const { id, projectId, k8sDeploymentName, k8sNamespace, k8sServiceName } = content;
-    
-      // Есть ли K8s данные?
-      const hasK8sFields =
-        k8sDeploymentName != null && k8sDeploymentName !== '' &&
-        k8sNamespace     != null && k8sNamespace     !== '' &&
-        k8sServiceName   != null && k8sServiceName   !== '';
-    
-      const confirmMsg = hasK8sFields
-        ? `Это сервис с K8s‑ресурсами. Удалить Deployment "${k8sDeploymentName}" и Service "${k8sServiceName}"?`
-        : `Удалить сервис "${content.name || id}"?`;
-    
-      if (!window.confirm(confirmMsg)) return;
-    
-      if (hasK8sFields) {
-        // Сначала удалить в Kubernetes
-        deleteK8sResources(k8sNamespace, k8sDeploymentName, k8sServiceName)
-          .then(() => {
-            // После успешного удаления K8s — удалить запись
-            return deleteService(id, projectId);
-          })
-          .then(() => {
-            // здесь можно обновить UI
-          })
-          .catch(err => {
-            console.error('Error deleting K8s resources or service:', err);
-            alert(`Ошибка при удалении: ${err.message}`);
+  const handleDeleteClick = () => {
+      // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
+      if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
+          // Заменяем window.confirm на MessageBox типа 'confirm'
+          setShowMessageBox({
+              isOpen: true,
+              type: 'confirm',
+              title: 'Подтверждение удаления',
+              message: `Вы уверены, что хотите удалить сервис "${content.name || content.id}"? Это действие необратимо.`,
+              onConfirm: async () => { // Делаем onConfirm асинхронным, чтобы дождаться удаления
+                  try {
+                      // Вызов функции удаления сервиса
+                      await onDeleteNode(content.id, content.projectId); 
+                      
+                      // Сообщение об успешном удалении
+                      setShowMessageBox({
+                          isOpen: true,
+                          type: 'alert',
+                          title: 'Успешно',
+                          message: `Сервис "${content.name || content.id}" успешно удален.`,
+                          onClose: () => setShowMessageBox(null)
+                      });
+                      onClose(); // Закрываем сайдбар после успешного удаления
+                  } catch (error) {
+                      console.error(`Не удалось удалить сервис ${content.id}:`, error.message);
+                      // Сообщение об ошибке удаления
+                      setShowMessageBox({
+                          isOpen: true,
+                          type: 'alert',
+                          title: 'Ошибка удаления',
+                          message: `Не удалось удалить сервис "${content.name || content.id}": ${error.message}`,
+                          onClose: () => setShowMessageBox(null)
+                      });
+                  }
+              },
+              onCancel: () => setShowMessageBox(null) // Закрываем MessageBox без действия
           });
       } else {
-        // Просто удаляем из вашего сервиса
-        deleteService(id, projectId).catch(err => {
-          console.error('Error deleting service:', err);
-          alert(`Ошибка при удалении сервиса: ${err.message}`);
-        });
+          console.warn('Attempted to delete a node that is not a serviceNode or is missing ID/ProjectID.', content);
+          // Сообщение об ошибке, если данные для удаления некорректны
+          setShowMessageBox({
+              isOpen: true,
+              type: 'alert',
+              title: 'Ошибка',
+              message: 'Невозможно удалить: это не сервис или отсутствуют необходимые данные (ID/ProjectID).',
+              onClose: () => setShowMessageBox(null)
+          });
       }
-    };
-    return (
-        <SidebarWrapper isOpen={isOpen}>
-            <SidebarHeader>
-                <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
-                <CloseButton onClick={onClose}>X</CloseButton>
-            </SidebarHeader>
-            <SidebarContent>
-                {content ? (
-                    content.type === 'repo' ? (
-                        // !!! ИЗМЕНЕНИЕ: Убедимся, что renderFileNodeForSidebar правильно обрабатывает URL
-                        // content уже содержит URL, переданный из DashboardForMain.jsx
-                        renderFileNodeForSidebar(content)
-                    ) : (
-                        renderServiceInfoForSidebar(content)
-                    )
-                ) : (
-                    <p>Select a node to view its details.</p>
-                )}
-                <DeleteButton onClick={handleDeleteClick}>Удалить сервис</DeleteButton>
-            </SidebarContent>
-        </SidebarWrapper>
-    );
+  };
+
+  return (
+      <SidebarWrapper isOpen={isOpen}>
+          <SidebarHeader>
+              <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
+              <CloseButton onClick={onClose}>X</CloseButton>
+          </SidebarHeader>
+          <SidebarContent>
+              {content ? (
+                  content.type === 'repo' ? (
+                      renderFileNodeForSidebar(content)
+                  ) : (
+                      renderServiceInfoForSidebar(content)
+                  )
+              ) : (
+                  <p>Select a node to view its details.</p>
+              )}
+              <DeleteButton onClick={handleDeleteClick}>Удалить сервис</DeleteButton>
+          </SidebarContent>
+      </SidebarWrapper>
+  );
 };
+
 
 
 // --- Context Menu Component --- (без изменений)
