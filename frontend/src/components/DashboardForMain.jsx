@@ -183,85 +183,80 @@ const SidebarContent = styled.div`
     }
 `;
 
-const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, setShowMessageBox }) => {
-  const isServiceNode = content?.type === 'serviceNode'|| content?.type === 'service';
-  
+const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode }) => {
+  const [messageBoxProps, setMessageBoxProps] = useState(null); // null или объект с props для MessageBox
+  const isServiceNode = content?.type === 'serviceNode' || content?.type === 'service';
 
   const handleDeleteClick = () => {
-      if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
-          setShowMessageBox({
-              isOpen: true,
-              type: 'confirm',
-              title: 'Подтверждение удаления',
-              message: `Вы уверены, что хотите удалить сервис "${content.label || content.name || content.id}"? Это действие необратимо.`,
-              onConfirm: async () => { // Делаем onConfirm асинхронным, чтобы дождаться выполнения onDeleteNode
-                  try {
-                      // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
-                      // УДАЛЕН ПРЯМОЙ ВЫЗОВ deleteService
-                      // await deleteService(content.id, content.projectId); // <-- ЭТОТ ВЫЗОВ НАДО УДАЛИТЬ!
-                      // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
-                      
-                      // Вызов onDeleteNode, который содержит логику вызова deleteService и обновления React Flow
-                      await onDeleteNode(content.id, content.projectId); 
-                      
-                      // Сообщение об успешном удалении (отображается после того, как onDeleteNode завершится успешно)
-                      setShowMessageBox({
-                          isOpen: true,
-                          type: 'alert',
-                          title: 'Успешно',
-                          message: `Сервис "${content.name || content.id}" успешно удален.`,
-                          onClose: () => setShowMessageBox(null)
-                      });
-                      onClose(); // Закрываем сайдбар после успешного удаления
-                  } catch (error) {
-                      console.error(`Не удалось удалить сервис ${content.id}:`, error.message);
-                      // Сообщение об ошибке удаления
-                      setShowMessageBox({
-                          isOpen: true,
-                          type: 'alert',
-                          title: 'Ошибка удаления',
-                          message: `Не удалось удалить сервис "${content.name || content.id}": ${error.message}`,
-                          onClose: () => setShowMessageBox(null)
-                      });
-                  }
-              },
-              onCancel: () => setShowMessageBox(null) // Закрываем MessageBox без действия
-          });
-      } else {
-          console.warn('Attempted to delete a node that is not a serviceNode or is missing ID/ProjectID.', content);
-          // Сообщение об ошибке, если данные для удаления некорректны
-          setShowMessageBox({
+    if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
+      // Открываем окно подтверждения удаления
+      setMessageBoxProps({
+        isOpen: true,
+        type: 'confirm',
+        title: 'Подтверждение удаления',
+        message: `Вы уверены, что хотите удалить сервис "${content.name || content.id}"? Это действие необратимо.`,
+        onConfirm: async () => {
+          try {
+            await onDeleteNode(content.id, content.projectId);
+
+            // После успешного удаления показываем alert
+            setMessageBoxProps({
               isOpen: true,
               type: 'alert',
-              title: 'Ошибка',
-              message: 'Невозможно удалить: это не сервис или отсутствуют необходимые данные (ID/ProjectID).',
-              onClose: () => setShowMessageBox(null)
-          });
-      }
+              title: 'Успешно',
+              message: `Сервис "${content.name || content.id}" успешно удалён.`,
+              onClose: () => setMessageBoxProps(null),
+            });
+
+            onClose(); // Закрываем сайдбар
+          } catch (error) {
+            // При ошибке показываем alert с ошибкой
+            setMessageBoxProps({
+              isOpen: true,
+              type: 'alert',
+              title: 'Ошибка удаления',
+              message: `Не удалось удалить сервис: ${error.message || error}`,
+              onClose: () => setMessageBoxProps(null),
+            });
+          }
+        },
+        onCancel: () => setMessageBoxProps(null),
+        onClose: () => setMessageBoxProps(null),
+      });
+    } else {
+      // Если данные некорректны, покажем предупреждение через MessageBox
+      setMessageBoxProps({
+        isOpen: true,
+        type: 'alert',
+        title: 'Ошибка',
+        message: 'Невозможно удалить: это не сервис или отсутствуют необходимые данные (ID/ProjectID).',
+        onClose: () => setMessageBoxProps(null),
+      });
+    }
   };
 
   return (
+    <>
       <SidebarWrapper isOpen={isOpen}>
-          <SidebarHeader>
-              <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
-              <CloseButton onClick={onClose}>X</CloseButton>
-          </SidebarHeader>
-          <SidebarContent>
-              {content ? (
-                  content.type === 'repo' ? (
-                      renderFileNodeForSidebar(content)
-                  ) : (
-                      renderServiceInfoForSidebar(content)
-                  )
-              ) : (
-                  <p>Select a node to view its details.</p>
-              )}
-              <DeleteButton onClick={handleDeleteClick}>Удалить сервис</DeleteButton>
-          </SidebarContent>
+        <SidebarHeader>
+          <h3>{content?.type === 'repo' ? 'Repository Structure' : 'Service Details'}</h3>
+          <CloseButton onClick={onClose}>X</CloseButton>
+        </SidebarHeader>
+        <SidebarContent>
+          {content ? (
+            content.type === 'repo' ? renderFileNodeForSidebar(content) : renderServiceInfoForSidebar(content)
+          ) : (
+            <p>Select a node to view its details.</p>
+          )}
+          <DeleteButton onClick={handleDeleteClick}>Удалить сервис</DeleteButton>
+        </SidebarContent>
       </SidebarWrapper>
+
+      {/* Рендерим MessageBox, если он открыт */}
+      {messageBoxProps && <MessageBox {...messageBoxProps} />}
+    </>
   );
 };
-
 
 
 // --- Context Menu Component --- (без изменений)
