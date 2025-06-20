@@ -365,6 +365,7 @@ const DashboardForMain = () => {
               ...filteredFileServiceNodes,
               ...serviceNodes
             ]);
+            console.log('Создание serviceNode:', serviceNodes);
           
             // Сбрасываем рёбра
             setEdges(fileEdges);
@@ -453,19 +454,19 @@ const DashboardForMain = () => {
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
-    setIsSidebarOpen(true);
+      setIsSidebarOpen(true);
 
-    if (node.type === 'repoNode' && structure) {
-        // Применяем рекурсивную нормализацию ко всей структуре перед передачей в sidebarContent
-        const fullyNormalizedStructure = recursivelyNormalizeFileNode(structure);
-        setSidebarContent({ type: 'repo', ...fullyNormalizedStructure, URL: node.data.URL });
-    } else if (node.type === 'serviceNode') {
-        console.log('Setting sidebarContent for serviceNode:', node.data);
-        setSidebarContent({ type: 'serviceNode', ...node.data });
-    } else {
-        // Если это не repoNode или serviceNode, и специфичное содержимое сайдбара не требуется, устанавливаем в null
-        setSidebarContent(null);
-    }
+      if (node.type === 'repoNode' && structure) {
+          // Применяем рекурсивную нормализацию ко всей структуре перед передачей в sidebarContent
+          const fullyNormalizedStructure = recursivelyNormalizeFileNode(structure);
+          setSidebarContent({ type: 'repo', ...fullyNormalizedStructure, URL: node.data.URL });
+      } else if (node.type === 'serviceNode') {
+          console.log('Setting sidebarContent for serviceNode:', node.data);
+          setSidebarContent({ type: 'serviceNode', ...node.data });
+      } else {
+          // Если это не repoNode или serviceNode, и специфичное содержимое сайдбара не требуется, устанавливаем в null
+          setSidebarContent(null);
+      }
     }, [structure, currentProjectId]);
 
     // Обработчик правого клика по фону холста (ПКМ)
