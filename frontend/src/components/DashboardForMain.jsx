@@ -258,6 +258,8 @@ const DashboardForMain = () => {
     const [contextMenu, setContextMenu] = useState(null);
 
     const [showMessageBox, setShowMessageBox] = useState(null);
+    const [rawServiceNodes, setRawServiceNodes] = useState([]);
+
 
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
@@ -326,25 +328,28 @@ const DashboardForMain = () => {
           .then(([repoNode, { nodes: fileNodes = [], edges: fileEdges = [] }, services]) => {
             // Преобразуем сервисы из API в узлы
             const filteredFileServiceNodes = fileNodes.filter(n => n.type === 'serviceNode');
+            
+            // Собираем "сырые" данные
+            const rawList = services.map(svc => ({
+              id: svc.id,
+              type: svc.type,
+              position: { x: svc.positionX, y: svc.positionY },
+              name: svc.name,
+              projectId: svc.projectId,
+              status: svc.status,
+              k8sDeploymentName: svc.k8sDeploymentName?.Valid ? svc.k8sDeploymentName.String : null,
+              k8sNamespace: svc.k8sNamespace?.Valid ? svc.k8sNamespace.String : null,
+              k8sServiceName: svc.k8sServiceName?.Valid ? svc.k8sServiceName.String : null,
+              k8sNodePort: svc.k8sNodePort?.Valid ? svc.k8sNodePort.Int32 : null,
+              k8sReplicas: svc.k8sReplicas?.Valid ? svc.k8sReplicas.Int32 : null
+            }));
+            
+            // Сохраняем этот список для дальнейшего использования
+            setRawServiceNodes(rawList);
           
-            const serviceNodes = services.map(svc => {
-              const nodeData = {
-                id: svc.id,
-                type: svc.type,
-                position: { x: svc.positionX, y: svc.positionY },
-                name: svc.name,
-                projectId: svc.projectId,
-                status: svc.status,
-                k8sDeploymentName: svc.k8sDeploymentName?.Valid ? svc.k8sDeploymentName.String : null,
-                k8sNamespace: svc.k8sNamespace?.Valid ? svc.k8sNamespace.String : null,
-                k8sServiceName: svc.k8sServiceName?.Valid ? svc.k8sServiceName.String : null,
-                k8sNodePort: svc.k8sNodePort?.Valid ? svc.k8sNodePort.Int32 : null,
-                k8sReplicas: svc.k8sReplicas?.Valid ? svc.k8sReplicas.Int32 : null
-              };
-          
-              console.log('Создание serviceNode:', nodeData);
-          
-              return createReactFlowServiceNode(
+            // А дальше уже строим React Flow–ноды из того же rawList:
+            const serviceNodes = rawList.map(nodeData =>
+              createReactFlowServiceNode(
                 nodeData.id,
                 nodeData.type,
                 nodeData.position,
@@ -356,20 +361,18 @@ const DashboardForMain = () => {
                 nodeData.k8sServiceName,
                 nodeData.k8sNodePort,
                 nodeData.k8sReplicas
-              );
-            });
-          
+              )
+            );
+            console.log("сырое", rawServiceNodes)
             // Собираем итоговый набор узлов
             setNodes([
               repoNode,
               ...filteredFileServiceNodes,
               ...serviceNodes
             ]);
-            console.log('Создание serviceNode:', serviceNodes);
-          
-            // Сбрасываем рёбра
             setEdges(fileEdges);
           })
+          
           .catch(err => {
             console.error('Error fetching dashboard data:', err);
             setError(err.message || 'Unknown error');
