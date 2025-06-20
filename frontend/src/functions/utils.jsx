@@ -101,7 +101,7 @@ export function createReactFlowServiceNode(
       data: {
         id,
         name: name || `${serviceType}-service`,
-        type: 'service',
+        type: type,
         serviceType,
         status: serviceStatus,
         volume: '',
