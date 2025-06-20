@@ -158,40 +158,48 @@ func main() {
 	// Инициализация маршрутизатора Gorilla Mux
 	router := mux.NewRouter()
 
-	// --- 1. Маршруты мониторинга ---
-	// Предоставляет метрики для Prometheus.
-	router.Handle("/metrics", promhttp.Handler())
+	// Регистрация маршрутов
+	router.Handle("/metrics", promhttp.Handler()) // Prometheus метрики
 
-	// --- 2. Маршруты аутентификации ---
-	// Управление регистрацией и входом пользователей.
-	router.HandleFunc("/api/register", handleRegister)
-	router.HandleFunc("/api/login", handleLogin)
+	// Маршруты для работы с репозиторием и сервисами
+	router.HandleFunc("/api/repo-tree", handleRepoTree).Methods("GET", "OPTIONS")
+	router.Handle("/api/create-service", WithAuth(http.HandlerFunc(handleCreateService))).Methods("POST", "OPTIONS")
+	router.Handle("/api/update-node-position", WithAuth(http.HandlerFunc(handleUpdateNodePosition))).Methods("POST", "OPTIONS")
 
-	// --- 3. Маршруты управления проектами ---
-	// Работа с общими операциями над проектами.
+	// Маршруты для управления проектами
 	router.Handle("/api/projects", WithAuth(http.HandlerFunc(handleProjects)))
 
-	// --- 4. Маршруты для репозиториев и сервисов ---
-	// Работа с получением структуры репозитория и общими операциями над сервисами.
-	router.HandleFunc("/api/repo-tree", handleRepoTree)
-	router.Handle("/api/create-service", WithAuth(http.HandlerFunc(handleCreateService)))
-	router.Handle("/api/update-node-position", WithAuth(http.HandlerFunc(handleUpdateNodePosition)))
-	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails)))
-	router.Handle("/api/projects/{project_id}/services", WithAuth(http.HandlerFunc(handleGetServicesByProjectID)))
-	router.Handle("/api/projects/{project_id}/services/{service_id}", WithAuth(http.HandlerFunc(handleDeleteService)))
+	// Маршруты для аутентификации
+	router.HandleFunc("/api/register", handleRegister).Methods("POST", "OPTIONS")
+	router.HandleFunc("/api/login", handleLogin).Methods("POST", "OPTIONS")
 
-	// --- 5. Маршруты для специфичных типов сервисов / операций Kubernetes ---
-	// Маршруты, связанные с развертыванием и управлением специфичными K8s ресурсами.
-	router.Handle("/api/projects/{project_id}/auth-services", WithAuth(http.HandlerFunc(handleCreateAuthService)))
-	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePodAndService)))
-	router.Handle("/api/projects/{project_id}/deploys", WithAuth(http.HandlerFunc(handleCreateDeploymentAndService)))
-	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask)))
+	router.Handle(
+		"/api/projects/{project_id}/services/{service_id}",
+		WithAuth(http.HandlerFunc(handleDeleteService)),
+	).Methods("DELETE", "OPTIONS")
 
-	// --- 6. Маршруты для пользователей проекта (если они отличаются от общей работы с проектами) ---
-	router.Handle("/api/projects/{project_id}/users", WithAuth(http.HandlerFunc(getUsersHandler)))
+	// Маршруты для специфичных сервисов авторизации (связанных с project_id)
+	router.Handle(
+		"/api/projects/{project_id}/auth-services",
+		WithAuth(http.HandlerFunc(handleCreateAuthService)),
+	).Methods("POST", "OPTIONS")
 
-	// --- 7. Маршруты для управления ресурсами (админские/очистка) ---
-	router.Handle("/api/delete-resources", WithAuth(http.HandlerFunc(handleDeleteResources)))
+	router.Handle("/api/projects/{project_id}/services", WithAuth(http.HandlerFunc(handleGetServicesByProjectID))).Methods("GET", "OPTIONS")
+	// Маршруты для получения пользователей проекта
+	router.Handle(
+		"/api/projects/{project_id}/users",
+		WithAuth(http.HandlerFunc(getUsersHandler)),
+	).Methods("GET", "OPTIONS")
+
+	router.Handle("/api/projects/{project_id}/pods", WithAuth(http.HandlerFunc(handleCreatePodAndService))).Methods("POST", "OPTIONS")
+
+	router.Handle("/api/projects/{project_id}/deploys", WithAuth(http.HandlerFunc(handleCreateDeploymentAndService))).Methods("POST", "OPTIONS")
+
+	router.Handle("/api/execute-task", WithAuth(http.HandlerFunc(handleExecuteTask))).Methods("POST", "OPTIONS")
+
+	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails))).Methods("GET", "OPTIONS")
+
+	router.Handle("/api/delete-resources", WithAuth(http.HandlerFunc(handleDeleteResources))).Methods("DELETE", "OPTIONS")
 
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
