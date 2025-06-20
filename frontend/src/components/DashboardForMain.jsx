@@ -194,12 +194,17 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
               type: 'confirm',
               title: 'Подтверждение удаления',
               message: `Вы уверены, что хотите удалить сервис "${content.label || content.name || content.id}"? Это действие необратимо.`,
-              onConfirm: async () => { // Делаем onConfirm асинхронным, чтобы дождаться удаления
+              onConfirm: async () => { // Делаем onConfirm асинхронным, чтобы дождаться выполнения onDeleteNode
                   try {
-                      // Вызов функции удаления сервиса
-                      await deleteService(content.id, content.projectId); 
+                      // --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+                      // УДАЛЕН ПРЯМОЙ ВЫЗОВ deleteService
+                      // await deleteService(content.id, content.projectId); // <-- ЭТОТ ВЫЗОВ НАДО УДАЛИТЬ!
+                      // --- КОНЕЦ ИСПРАВЛЕНИЯ ---
                       
-                      // Сообщение об успешном удалении
+                      // Вызов onDeleteNode, который содержит логику вызова deleteService и обновления React Flow
+                      await onDeleteNode(content.id, content.projectId); 
+                      
+                      // Сообщение об успешном удалении (отображается после того, как onDeleteNode завершится успешно)
                       setShowMessageBox({
                           isOpen: true,
                           type: 'alert',
@@ -207,9 +212,6 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
                           message: `Сервис "${content.name || content.id}" успешно удален.`,
                           onClose: () => setShowMessageBox(null)
                       });
-                      // onDeleteNode now only needs to update the React Flow state (remove the node)
-                      // It should NOT call deleteService again, as it's already done here.
-                      onDeleteNode(content.id, content.projectId); 
                       onClose(); // Закрываем сайдбар после успешного удаления
                   } catch (error) {
                       console.error(`Не удалось удалить сервис ${content.id}:`, error.message);
@@ -237,6 +239,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode, s
           });
       }
   };
+
   return (
       <SidebarWrapper isOpen={isOpen}>
           <SidebarHeader>
