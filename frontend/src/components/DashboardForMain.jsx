@@ -15,7 +15,7 @@ import 'reactflow/dist/style.css';
 import MessageBox from './MessageBox';
 
 // Импорты API и утилит
-import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask } from '../functions/api/api';
+import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask, deleteK8sResources } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
 // --- Styled Components --- (без изменений)
@@ -188,15 +188,45 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode })
     
 
     const handleDeleteClick = () => {
-        // Убедимся, что это serviceNode и что есть onDeleteNode проп и необходимые данные
-        if (isServiceNode && onDeleteNode && content?.id && typeof content?.projectId === 'number') {
-            // Опционально: добавить подтверждение пользователя перед удалением
-            if (window.confirm(`Вы уверены, что хотите удалить сервис "${content.name || content.id}"?`)) {
-                onDeleteNode(content.id, content.projectId);
-            }
-        } else {
-            console.warn('Attempted to delete a node that is not a serviceNode or is missing ID/ProjectID.', content);
-        }
+      if (!isServiceNode || !content?.id || typeof content?.projectId !== 'number') {
+        console.warn('Not a service node or missing ID/ProjectID:', content);
+        return;
+      }
+      const { id, projectId, k8sDeploymentName, k8sNamespace, k8sServiceName } = content;
+    
+      // Есть ли K8s данные?
+      const hasK8sFields =
+        k8sDeploymentName != null && k8sDeploymentName !== '' &&
+        k8sNamespace     != null && k8sNamespace     !== '' &&
+        k8sServiceName   != null && k8sServiceName   !== '';
+    
+      const confirmMsg = hasK8sFields
+        ? `Это сервис с K8s‑ресурсами. Удалить Deployment "${k8sDeploymentName}" и Service "${k8sServiceName}"?`
+        : `Удалить сервис "${content.name || id}"?`;
+    
+      if (!window.confirm(confirmMsg)) return;
+    
+      if (hasK8sFields) {
+        // Сначала удалить в Kubernetes
+        deleteK8sResources(k8sNamespace, k8sDeploymentName, k8sServiceName)
+          .then(() => {
+            // После успешного удаления K8s — удалить запись
+            return deleteService(id, projectId);
+          })
+          .then(() => {
+            // здесь можно обновить UI
+          })
+          .catch(err => {
+            console.error('Error deleting K8s resources or service:', err);
+            alert(`Ошибка при удалении: ${err.message}`);
+          });
+      } else {
+        // Просто удаляем из вашего сервиса
+        deleteService(id, projectId).catch(err => {
+          console.error('Error deleting service:', err);
+          alert(`Ошибка при удалении сервиса: ${err.message}`);
+        });
+      }
     };
     return (
         <SidebarWrapper isOpen={isOpen}>

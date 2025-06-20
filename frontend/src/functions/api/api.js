@@ -197,3 +197,26 @@ export async function createDeploymentAndService(projectId, body) {
     if (!res.ok) throw new Error(`createDeploymentAndService failed: ${res.statusText}`);
     return res.json();
   }
+
+export const deleteK8sResources = async (namespace, deploymentName, serviceName) => {
+  if (!namespace || !deploymentName || !serviceName) {
+    throw new Error('namespace, deploymentName и serviceName обязательны для удаления ресурсов');
+  }
+
+  const url = `${API_BASE_URL}/delete-resources`;
+  console.log(`Sending DELETE request to API: ${url}`, { namespace, deploymentName, serviceName });
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({ namespace, deploymentName, serviceName }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Failed to delete resources: ${response.status} ${text}`);
+  }
+};
