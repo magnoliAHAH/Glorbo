@@ -199,6 +199,8 @@ func main() {
 
 	router.Handle("/api/projects/{projectId}/services/{serviceId}", WithAuth(http.HandlerFunc(handleGetServiceDetails))).Methods("GET", "OPTIONS")
 
+	router.Handle("/api/delete-resources", WithAuth(http.HandlerFunc(handleDeleteResources))).Methods("DELETE", "OPTIONS")
+
 	log.Println("Server running on http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", router))
 }
@@ -2004,4 +2006,90 @@ func handleGetServiceDetails(w http.ResponseWriter, r *http.Request) {
 	// Отправляем найденные детали сервиса в формате JSON
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(service)
+}
+
+func deleteDeploymentAndServiceK8s(namespace, deploymentName, serviceName string) error {
+	clientset, err := initK8sClient()
+	if err != nil {
+		return fmt.Errorf("инициализация клиента: %w", err)
+	}
+
+	// Удаляем Service
+	if err := clientset.CoreV1().
+		Services(namespace).
+		Delete(context.TODO(), serviceName, metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("удаление Service %s: %w", serviceName, err)
+		}
+		// Если уже нет — игнорируем
+		log.Printf("Service %s уже отсутствует в namespace %s", serviceName, namespace)
+	} else {
+		log.Printf("Service %s успешно удалён из namespace %s", serviceName, namespace)
+	}
+
+	// Удаляем Deployment
+	if err := clientset.AppsV1().
+		Deployments(namespace).
+		Delete(context.TODO(), deploymentName, metav1.DeleteOptions{}); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("удаление Deployment %s: %w", deploymentName, err)
+		}
+		log.Printf("Deployment %s уже отсутствует в namespace %s", deploymentName, namespace)
+	} else {
+		log.Printf("Deployment %s успешно удалён из namespace %s", deploymentName, namespace)
+	}
+
+	return nil
+}
+
+// handleDeleteK8sResources обрабатывает HTTP DELETE-запрос для удаления Deployment+Service
+func handleDeleteResources(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "https://mixail.ermin33.fvds.ru")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	w.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS")
+
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Проверка авторизации
+	userID := r.Context().Value(userIDKey)
+	if userID == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Ожидаем JSON с полями namespace, deploymentName, serviceName
+	var payload struct {
+		Namespace      string `json:"namespace"`
+		DeploymentName string `json:"deploymentName"`
+		ServiceName    string `json:"serviceName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		log.Printf("Invalid request body for delete resources: %v", err)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Валидация
+	if payload.Namespace == "" || payload.DeploymentName == "" || payload.ServiceName == "" {
+		http.Error(w, "namespace, deploymentName and serviceName are required", http.StatusBadRequest)
+		return
+	}
+
+	// Само удаление
+	if err := deleteDeploymentAndServiceK8s(payload.Namespace, payload.DeploymentName, payload.ServiceName); err != nil {
+		log.Printf("Failed to delete resources: %v", err)
+		http.Error(w, fmt.Sprintf("Failed to delete resources: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Успешный ответ
+	w.WriteHeader(http.StatusNoContent)
 }
