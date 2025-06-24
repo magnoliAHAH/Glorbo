@@ -6,7 +6,7 @@ const Home = () => (
   <HomeLayout>
     <div style={{ padding: '20px', color: '#eee' }}>
       <h1>Welcome to Glorbo Deployment Dashboard</h1>
-      <p>Перенос инфраструктуры проекта из Docker Compose в K3s.</p>
+      <p>Инструменты для разработки вкб и мобильных приложений, Автоматизация сборки Dockefile и деплой в K3s.</p>
       <Link to="/login" style={{
         display: 'inline-block',
         marginTop: '20px',

@@ -10,7 +10,7 @@ function CreateProjectForm() {
 
     const res = await fetch("https://mixail.ermin33.fvds.ru/api/projects", {
       method: "POST",
-      credentials: "include", // обязательно, чтобы отправить cookie с JWT
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
       },

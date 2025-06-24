@@ -136,21 +136,6 @@ const Button = styled.button`
     }
 `;
 
-/**
- * Универсальный компонент для вывода сообщений (alert, confirm, prompt, form).
- *
- * @param {object} props
- * @param {boolean} props.isOpen - Открыто ли модальное окно.
- * @param {string} props.type - Тип сообщения: 'alert', 'confirm', 'prompt', 'form'.
- * @param {string} props.title - Заголовок сообщения.
- * @param {string} props.message - Основной текст сообщения.
- * @param {string} [props.placeholder] - Плейсхолдер для поля ввода (только для type='prompt').
- * @param {Array<Object>} [props.fields] - Массив определений полей для ввода (только для type='form').
- * Каждый объект поля: { name: string, label: string, type: string (e.g., 'text', 'number', 'textarea'), defaultValue: any, placeholder: string, autoFocus: boolean }
- * @param {function} [props.onConfirm] - Колбэк при подтверждении. Для 'prompt' передает введенное значение. Для 'form' передает объект со всеми введенными данными.
- * @param {function} [props.onCancel] - Колбэк при отмене.
- * @param {function} [props.onClose] - Колбэк при закрытии (для 'alert'), также вызывается после onConfirm/onCancel.
- */
 const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfirm, onCancel, onClose }) => {
     // Состояние для одиночного ввода (prompt)
     const [inputValue, setInputValue] = useState('');
@@ -218,10 +203,9 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
         <MessageBoxOverlay onClick={handleOverlayClick}>
             <MessageBoxContent onClick={e => e.stopPropagation()}>
                 <Title>{title}</Title>
-                {/* Сообщение всегда отображается, независимо от типа ввода */}
                 <Message>{message}</Message>
 
-                {hasInput && ( // Рендерим одиночное поле ввода для 'prompt'
+                {hasInput && (
                     <Input
                         type="text"
                         placeholder={placeholder}
@@ -231,7 +215,7 @@ const MessageBox = ({ isOpen, type, title, message, placeholder, fields, onConfi
                     />
                 )}
 
-                {isForm && fields && ( // Рендерим несколько полей ввода для 'form'
+                {isForm && fields && (
                     <div>
                         {fields.map(field => (
                             <InputGroup key={field.name}>

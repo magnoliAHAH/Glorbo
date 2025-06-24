@@ -1,5 +1,3 @@
-// src/api.js
-// !!! Убедитесь, что API_BASE_URL совпадает с вашим бэкендом
 const API_BASE_URL = 'https://mixail.ermin33.fvds.ru/api'; 
 
 async function handleResponse(response) {
@@ -51,8 +49,6 @@ export async function getRepoTree(repoURL) {
     return handleResponse(response);
 }
 
-// Изменение: теперь функция createService будет принимать projectId (число)
-// Мы будем передавать его из DashboardForMain.jsx, где он будет прочитан из localStorage
 export async function createService(projectId, serviceType, position) {
     console.log('Sending createService request with:', { projectId, serviceType, position });
     const response = await fetch(`${API_BASE_URL}/create-service`, {
@@ -64,12 +60,11 @@ export async function createService(projectId, serviceType, position) {
     return handleResponse(response);
 }
 
-// Изменение: функция updateNodePosition теперь будет принимать projectId
-export async function updateNodePosition(nodeId, newPosition, projectId) { // Изменено на projectId
+export async function updateNodePosition(nodeId, newPosition, projectId) {
     const response = await fetch(`${API_BASE_URL}/update-node-position`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId, position: newPosition, projectId: Number(projectId) }), // Отправляем projectId
+        body: JSON.stringify({ nodeId, position: newPosition, projectId: Number(projectId) }), 
         credentials: 'include',
     });
     return handleResponse(response);
@@ -94,7 +89,7 @@ export async function getProjectServices(projectId) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            credentials: 'include', // Важно для отправки JWT-токена
+            credentials: 'include',
         });
         return handleResponse(response);
     } catch (error) {
@@ -110,7 +105,7 @@ export async function getServicesList(projectId) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            credentials: 'include', // Важно для отправки JWT-токена
+            credentials: 'include',
         });
         return handleResponse(response);
     } catch (error) {
@@ -125,7 +120,6 @@ export const deleteService = async (serviceId, projectId) => {
             throw new Error('Service ID and Project ID are required for deletion.');
         }
 
-        // Формируем URL, включая serviceId и projectId в пути
         const url = `${API_BASE_URL}/projects/${projectId}/services/${serviceId}`;
 
         console.log(`Sending DELETE request to: ${url}`);
@@ -134,18 +128,14 @@ export const deleteService = async (serviceId, projectId) => {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
-                // Если ваш бэкенд ожидает заголовок Authorization,
-                // убедитесь, что он также обрабатывается middleware (например, WithAuth)
-                // и что ваш фронтенд отправляет его (чаще всего через HTTP-куки,
-                // что обеспечивается 'credentials: "include"').
             },
-            credentials: 'include', // Важно для отправки куки с JWT
+            credentials: 'include',
         });
 
         return handleResponse(response);
     } catch (error) {
         console.error('Error deleting service:', error);
-        throw error; // Перебрасываем ошибку для дальнейшей обработки в UI
+        throw error;
     }
 };
 
@@ -160,7 +150,6 @@ export async function runProjectTask(taskBody) {
       }
     );
   
-    // Не парсим JSON, а получаем текст ответа
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(errorText || response.statusText);
@@ -173,9 +162,6 @@ export async function runProjectTask(taskBody) {
   
 
 export async function createPodAndService(projectId, podSpec) {
-  // podSpec — это объект, например {
-  //   namespace, podName, image, containerPort, env, command, args, labels
-  // }
   const response = await fetch(
     `${API_BASE_URL}/projects/${projectId}/pods`, 
     {

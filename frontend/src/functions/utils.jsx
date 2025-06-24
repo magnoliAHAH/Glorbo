@@ -1,17 +1,10 @@
 // src/utils.js
 // Вспомогательные функции для преобразования данных и рендеринга сайдбара
 
-/**
- * Рекурсивно преобразует древовидную структуру FileNode в узлы и рёбра React Flow.
- * Используется, в основном, для инициализации узлов на холсте (если это корневой репозиторий)
- * и для отображения всей структуры в сайдбаре.
- * Важно: эта функция создает узлы для ВСЕЙ структуры.
- */
 export function convertFileNodeToReactFlowElements(fileNode, parentId = null, depth = 0, siblingIndex = 0) {
     const nodes = [];
     const edges = [];
 
-    // Базовые координаты для упорядоченного размещения (если нет сохраненных позиций)
     const initialX = depth * 250;
     const initialY = siblingIndex * 100 + depth * 50;
 
@@ -19,14 +12,13 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
     let nodeType = 'default';
 
     if (fileNode.type === 'service') {
-        // Если у сервиса есть сохраненные позиции, используем их
         if (fileNode.position && fileNode.position.x != null && fileNode.position.y != null) {
             position = { x: fileNode.position.x, y: fileNode.position.y };
         }
-        nodeType = 'serviceNode'; // Кастомный тип узла для сервисов
+        nodeType = 'serviceNode';
     } else if (fileNode.type === 'repo') {
         nodeType = 'repoNode';
-        position = { x: 50, y: 50 }; // Фиксированная позиция для узла репозитория
+        position = { x: 50, y: 50 };я
     } else if (fileNode.type === 'folder') {
         nodeType = 'folderNode';
     } else if (fileNode.type === 'file') {
@@ -40,11 +32,7 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
         data: {
             name: fileNode.name,
             type: fileNode.type,
-            ...fileNode, // Копируем все остальные свойства FileNode в data
-            // Обработка projectId: если приходит как { Int64: ..., Valid: ... } из Go,
-            // берем Int64. Если просто число, то берем его напрямую.
-            // Если projectId уже число, то fileNode.projectId?.Int64 будет undefined,
-            // и тогда возьмется fileNode.projectId.
+            ...fileNode,
             projectId: fileNode.projectId?.Int64 !== undefined ? fileNode.projectId.Int64 : fileNode.projectId,
         },
         // Узлы репозитория и сервисов должны быть перетаскиваемыми
@@ -71,16 +59,6 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
     return { nodes, edges };
 }
 
-/**
-/**
- * Создает новый узел React Flow для сервиса.
- * @param {string} id - Уникальный ID узла.
- * @param {string} serviceType - Тип сервиса (e.g., 'backend', 'authentication').
- * @param {object} position - Объект {x, y} для позиции узла.
- * @param {string} name - Имя сервиса.
- * @param {number} projectId - ID проекта, к которому принадлежит сервис.
- * @returns {object} Объект узла React Flow.
- */
 export function createReactFlowServiceNode(
     id,
     serviceType,
@@ -118,12 +96,6 @@ export function createReactFlowServiceNode(
   }
   
 
-/**
- * Рекурсивная функция для рендеринга файловой структуры для сайдбара.
- * @param {object} node - Текущий узел (FileNode) для рендеринга.
- * @param {number} depth - Текущая глубина в древовидной структуре.
- * @returns {JSX.Element | null} JSX-элемент для отображения узла и его дочерних элементов.
- */
 export function renderFileNodeForSidebar(node, depth = 0) {
     if (!node) return null;
 
@@ -185,12 +157,6 @@ export function renderFileNodeForSidebar(node, depth = 0) {
 }
 
 
-/**
- * Вспомогательная функция для плоского отображения информации о сервисе (для сайдбара).
- * Используется, когда выбирается ServiceNode.
- * @param {object} serviceData - Данные сервиса для отображения.
- * @returns {JSX.Element} JSX-элемент с деталями сервиса.
- */
 export function renderServiceInfoForSidebar(serviceData) {
     if (!serviceData) return <p>No service selected</p>;
     console.log('serviceData in sidebar:', serviceData);

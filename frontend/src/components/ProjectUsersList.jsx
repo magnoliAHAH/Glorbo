@@ -19,7 +19,7 @@ const ProjectUsersList = () => {
         const response = await fetch(
           `https://mixail.ermin33.fvds.ru/api/projects/${projectId}/users`,
           {
-            credentials: 'include', // важно для передачи cookie с токеном
+            credentials: 'include',
           }
         );
 

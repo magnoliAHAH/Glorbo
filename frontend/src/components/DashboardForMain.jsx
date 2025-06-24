@@ -18,7 +18,7 @@ import MessageBox from './MessageBox';
 import { createService, updateNodePosition, getRepoTree, createAuthService, getProjectServices, deleteService, createDeploymentAndService, runProjectTask } from '../functions/api/api';
 import { createReactFlowServiceNode, renderFileNodeForSidebar, renderServiceInfoForSidebar, convertFileNodeToReactFlowElements } from '../functions/utils';
 
-// --- Styled Components --- (без изменений)
+// --- Styled Components ---
 const fadeIn = keyframes`
     from { opacity: 0; }
     to { opacity: 1; }
@@ -43,7 +43,7 @@ const ContextMenuItem = styled.div`
     }
 `;
 
-// --- Custom Nodes for React Flow --- (без изменений)
+// --- Custom Nodes for React Flow ---
 const StyledNode = styled.div`
     padding: 10px 15px;
     border-radius: 5px;
@@ -259,7 +259,7 @@ const RepoOrServiceDetailsSidebar = ({ isOpen, content, onClose, onDeleteNode })
 };
 
 
-// --- Context Menu Component --- (без изменений)
+// --- Context Menu Component ---
 const ContextMenu = ({ x, y, onCreateService, onClose }) => {
     const serviceTypes = ['backend', 'frontend', 'database', 'redis', 'authentication', 'nginx', 'message-queue'];
 
@@ -299,7 +299,7 @@ const DashboardForMain = () => {
     const navigate = useNavigate();
     const currentRepoUrl = localStorage.getItem('repo');
 
-    // !!! ИЗМЕНЕНИЕ 1: useEffect для чтения projectId из localStorage
+    // 1 useEffect для чтения projectId из localStorage
     // Убедимся, что projectId установлен перед загрузкой repoTree
     useEffect(() => {
         const storedProjectId = localStorage.getItem('projectId');
@@ -318,7 +318,7 @@ const DashboardForMain = () => {
         }
     }, [navigate]);
 
-    // !!! ИЗМЕНЕНИЕ 2: Загрузка структуры репозитория зависит от currentProjectId
+    // 2 Загрузка структуры репозитория зависит от currentProjectId
     useEffect(() => {
         if (!currentRepoUrl) {
           navigate('/projects');
@@ -381,7 +381,7 @@ const DashboardForMain = () => {
             
             // Сохраняем этот список для дальнейшего использования
           
-            // А дальше уже строим React Flow–ноды из того же rawList:
+            // Cтроим React Flow–ноды из того же rawList:
             const serviceNodes = rawList.map(nodeData =>
               createReactFlowServiceNode(
                 nodeData.id,
@@ -429,8 +429,8 @@ const DashboardForMain = () => {
             return;
         }
     
-        // !!! ГЛАВНОЕ ИЗМЕНЕНИЕ: Отправляем только для SERVICE NODES !!!
-        if (node.type === 'serviceNode') { // <--- ИЗМЕНЕНО С "repoNode || serviceNode"
+        // Отправляем только для SERVICE NODES 
+        if (node.type === 'serviceNode') {
             try {
                 console.log(`Attempting to update position for service node ${node.id} to {x: ${node.position.x}, y: ${node.position.y}} in project ${currentProjectId}`);
                 await updateNodePosition(node.id, node.position, currentProjectId);
@@ -441,9 +441,6 @@ const DashboardForMain = () => {
             }
         } else {
             console.log(`Node type ${node.type} is not a service node. Position not saved.`);
-            // Если вы хотите сохранять позиции repoNode,
-            // вам потребуется отдельная таблица/поле в таблице 'projects'
-            // и отдельный API-эндпоинт для этого.
         }
     }, [currentProjectId]);
 
@@ -470,18 +467,18 @@ const DashboardForMain = () => {
     
         const newNode = { ...node };
     
-        // Check for `ProjectID` (Go's exported field name)
+        // `ProjectID`
         if (newNode.ProjectID && typeof newNode.ProjectID === 'object' &&
             'Int64' in newNode.ProjectID && 'Valid' in newNode.ProjectID) {
             newNode.ProjectID = newNode.ProjectID.Valid ? newNode.ProjectID.Int64 : null;
         }
-        // Check for `projectId` (common JavaScript camelCase)
+        // `projectId`
         if (newNode.projectId && typeof newNode.projectId === 'object' &&
             'Int64' in newNode.projectId && 'Valid' in newNode.projectId) {
             newNode.projectId = newNode.projectId.Valid ? newNode.projectId.Int64 : null;
         }
     
-        // Recursively process children
+        // Поиск по детям
         if (newNode.Children && Array.isArray(newNode.Children)) {
             newNode.Children = newNode.Children.map(child => recursivelyNormalizeFileNode(child));
         }
@@ -501,7 +498,6 @@ const DashboardForMain = () => {
           console.log('Setting sidebarContent for serviceNode:', node.data);
           setSidebarContent({ type: 'serviceNode', ...node.data });
       } else {
-          // Если это не repoNode или serviceNode, и специфичное содержимое сайдбара не требуется, устанавливаем в null
           setSidebarContent(null);
       }
     }, [structure, currentProjectId]);
@@ -515,26 +511,6 @@ const DashboardForMain = () => {
         });
     }, []);
 
-    // Обработчик для создания нового сервиса
-        // Обновленная функция handleCreateService для работы с MessageBox с типом 'form'
-
-        // Убедитесь, что вы импортируете все необходимые функции, такие как:
-        // createReactFlowServiceNode, createAuthService, createService, runProjectTask
-        // и состояния React, такие как currentProjectId, contextMenu, setNodes, setShowMessageBox, currentRepoUrl
-        // из вашего основного компонента (вероятно, DashboardForMain.jsx)
-        
-        // Предполагаемые пропсы или контекст, необходимые для этой функции:
-        // - currentProjectId (number): ID текущего проекта
-        // - contextMenu (object): Объект контекстного меню, содержащий x, y координаты
-        // - setNodes (function): Функция React.useState для обновления узлов React Flow
-        // - setShowMessageBox (function): Функция React.useState для управления видимостью MessageBox
-        // - currentRepoUrl (string): Текущий URL репозитория (если применимо)
-        // - runProjectTask (function): Функция для запуска задач проекта (сборка, деплой)
-        // - createAuthService (function): Функция для создания службы аутентификации
-        // - createService (function): Функция для создания общего сервиса
-        // - createReactFlowServiceNode (function): Функция для создания нового узла React Flow
-        
-        
         const handleCreateService = useCallback(async (serviceType) => {
           // 0) Проверяем projectId
           if (typeof currentProjectId !== 'number' || currentProjectId <= 0) {
@@ -783,18 +759,6 @@ const DashboardForMain = () => {
           setNodes
         ]);
         
-         // Зависимости useCallback
-        
-      
-      
-      
-      
-      
-      
-      
-      
-
-
     return (
         <Page>
 
@@ -873,42 +837,6 @@ const Page = styled.div`
   margin: 0;
   box-sizing: border-box;
   background-color: #f5f7fa;
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem 2rem;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  z-index: 10;
-`;
-
-const Title = styled.h2`
-  font-size: 1.8rem;
-  color: #333;
-  margin: 0;
-`;
-
-const SwitchButton = styled.button`
-  background: #3070f0;
-  color: white;
-  border: none;
-  padding: 0.8rem 1.5rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: background 0.2s ease, transform 0.1s ease;
-
-  &:hover {
-    background: #2554c7;
-    transform: translateY(-1px);
-  }
-  &:active {
-    transform: translateY(0);
-  }
 `;
 
 const Content = styled.div`
