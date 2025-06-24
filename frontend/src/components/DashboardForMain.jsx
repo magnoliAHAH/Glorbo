@@ -462,11 +462,11 @@ const DashboardForMain = () => {
         }
       }, [setNodes]);
       
-      const recursivelyNormalizeFileNode = (node) => {
+      const recursivelyNormalizeFileNode = useCallback((node) => { // Make recursivelyNormalizeFileNode a useCallback too
         if (!node) return null;
-    
+      
         const newNode = { ...node };
-    
+      
         // `ProjectID`
         if (newNode.ProjectID && typeof newNode.ProjectID === 'object' &&
             'Int64' in newNode.ProjectID && 'Valid' in newNode.ProjectID) {
@@ -477,19 +477,19 @@ const DashboardForMain = () => {
             'Int64' in newNode.projectId && 'Valid' in newNode.projectId) {
             newNode.projectId = newNode.projectId.Valid ? newNode.projectId.Int64 : null;
         }
-    
+      
         // Поиск по детям
         if (newNode.Children && Array.isArray(newNode.Children)) {
             newNode.Children = newNode.Children.map(child => recursivelyNormalizeFileNode(child));
         }
-    
+      
         return newNode;
-    };
+      }, []);
 
     // Обработчик клика по узлу (ЛКМ)
     const onNodeClick = useCallback((event, node) => {
       setIsSidebarOpen(true);
-
+    
       if (node.type === 'repoNode' && structure) {
           // Применяем рекурсивную нормализацию ко всей структуре перед передачей в sidebarContent
           const fullyNormalizedStructure = recursivelyNormalizeFileNode(structure);
@@ -500,7 +500,7 @@ const DashboardForMain = () => {
       } else {
           setSidebarContent(null);
       }
-    }, [structure, currentProjectId]);
+    }, [structure, recursivelyNormalizeFileNode]);
 
     // Обработчик правого клика по фону холста (ПКМ)
     const onPaneContextMenu = useCallback((event) => {

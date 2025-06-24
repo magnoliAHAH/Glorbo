@@ -18,7 +18,7 @@ export function convertFileNodeToReactFlowElements(fileNode, parentId = null, de
         nodeType = 'serviceNode';
     } else if (fileNode.type === 'repo') {
         nodeType = 'repoNode';
-        position = { x: 50, y: 50 };я
+        position = { x: 50, y: 50 };
     } else if (fileNode.type === 'folder') {
         nodeType = 'folderNode';
     } else if (fileNode.type === 'file') {
